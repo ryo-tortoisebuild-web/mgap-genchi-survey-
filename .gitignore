@@ -1,0 +1,10 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+
+# 利用者データは端末内(IndexedDB)。JSON書き出しはリポジトリに含めない
+*.json
+!manifest.webmanifest

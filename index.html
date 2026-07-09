@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#37474f">
+<title>現地調査 引き継ぎアプリ</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/print.css" media="print">
+</head>
+<body data-active-tab="map">
+
+<header id="app-header">
+  <div class="header-row">
+    <span class="app-title">📋 現地調査引き継ぎ</span>
+    <button type="button" id="project-name" class="project-name" title="現場情報を編集">（現場名未設定）</button>
+  </div>
+  <div class="header-actions">
+    <button type="button" class="btn btn-small" id="btn-projects">📁 物件一覧</button>
+    <button type="button" class="btn btn-small" id="btn-export">⬇ JSON書き出し</button>
+    <button type="button" class="btn btn-small" id="btn-import">⬆ JSON読み込み</button>
+    <input type="file" id="import-input" accept=".json,application/json" hidden>
+  </div>
+</header>
+
+<nav id="app-nav">
+  <button type="button" data-tab="map"><span class="nav-icon">🗺</span>間取り</button>
+  <button type="button" data-tab="assign"><span class="nav-icon">🖍</span>依頼先</button>
+  <button type="button" data-tab="output"><span class="nav-icon">🖨</span>出力</button>
+</nav>
+
+<main id="app-main">
+
+  <!-- 間取りタブ：背景＋撮影ポイント（ピン）＋写真格納 -->
+  <section id="screen-map" class="screen">
+    <div id="drawing-tabs"></div>
+    <div id="editor-empty" class="editor-empty">
+      <p>間取り図がまだありません。</p>
+      <button type="button" class="btn btn-primary" id="btn-add-drawing-empty">＋ 間取りを追加（平面図／立面図）</button>
+    </div>
+    <div id="editor-body">
+      <div id="editor-toolbar">
+        <button type="button" data-mode="select" class="tool-btn active" title="選択・移動">☝ 選択</button>
+        <button type="button" data-mode="pin" class="tool-btn" title="撮影ポイント（ピン）を配置">📍 撮影ポイント</button>
+        <button type="button" data-mode="bg" class="tool-btn" title="間取り画像をドラッグで移動">🖼 背景</button>
+        <span class="toolbar-sep"></span>
+        <span id="editor-drawtools"></span>
+        <button type="button" data-mode="delete" class="tool-btn tool-btn-delete" title="タップで削除">🗑 削除</button>
+        <span class="toolbar-sep"></span>
+        <button type="button" class="tool-btn" id="btn-zoom-in" title="拡大">＋</button>
+        <button type="button" class="tool-btn" id="btn-zoom-out" title="縮小">－</button>
+        <button type="button" class="tool-btn" id="btn-zoom-fit" title="全体表示">⤢</button>
+      </div>
+      <p id="editor-hint" class="editor-hint"></p>
+      <p class="muted editor-adjust-hint">図形・コメントは「☝ 選択」でつまんで調整（四角は四隅で台形化）</p>
+      <div class="editor-layout">
+        <div id="editor-stage">
+          <svg id="editor-svg" viewBox="0 0 1600 1200" preserveAspectRatio="xMidYMid meet"></svg>
+        </div>
+        <aside id="editor-panel"></aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- 依頼先タブ：職人ごとに写真へ書き込み -->
+  <section id="screen-assign" class="screen">
+    <div class="screen-inner">
+      <div class="assign-controls">
+        <h2 class="section-title">依頼先（職人）を選択</h2>
+        <div id="assign-tabs"></div>
+      </div>
+      <div id="assign-body"></div>
+    </div>
+  </section>
+
+  <!-- 出力タブ：職人別PDF（写真主役） -->
+  <section id="screen-output" class="screen">
+    <div class="screen-inner">
+      <div class="output-controls">
+        <h2 class="section-title">職人を選んでPDF出力</h2>
+        <div id="output-trades"></div>
+        <div class="output-actions">
+          <label class="field-inline"><input type="checkbox" id="output-include-bg" checked><span>間取り図（該当ピン強調）を先頭に付ける</span></label>
+          <button type="button" class="btn btn-primary" id="btn-print" disabled>🖨 PDF出力（印刷）</button>
+        </div>
+        <p class="muted output-note">「PDF出力」を押すと印刷ダイアログが開きます。送信先で「PDFとして保存」を選んでください（PC Chrome推奨）。</p>
+      </div>
+      <div id="print-root"></div>
+    </div>
+  </section>
+
+</main>
+
+<div id="modal-root"></div>
+<div id="toast"></div>
+
+<script src="js/constants.js"></script>
+<script src="js/store.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/photo.js"></script>
+<script src="js/draw.js"></script>
+<script src="js/input.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/card.js"></script>
+<script src="js/annotate.js"></script>
+<script src="js/output.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
