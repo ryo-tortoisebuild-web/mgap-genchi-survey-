@@ -217,7 +217,7 @@ window.App = window.App || {};
       x: 0, y: 8, 'text-anchor': 'middle', 'font-size': 24,
       fill: '#ffffff', 'font-weight': 'bold', 'font-family': 'sans-serif',
     });
-    num.textContent = pin.num;
+    num.textContent = App.store.pointNumber(pin.elementId); /* 番号は一覧の並び順 */
     g.appendChild(num);
     // ラベル（短縮）
     var label = el.label.length > 7 ? el.label.slice(0, 7) + '…' : el.label;
@@ -321,17 +321,25 @@ window.App = window.App || {};
     var dw = currentDrawing();
     var html = '';
 
-    /* 撮影ポイント一覧（間取りの有無に関わらず常時表示）：追加・配置・編集 */
-    var items = App.state.elements.map(function (el) {
+    /* 撮影ポイント一覧（間取りの有無に関わらず常時表示）：並び替え・配置・編集。
+       番号は一覧の並び順（pointNumber）。↑↓で入れ替え→全画面に反映 */
+    var total = App.state.elements.length;
+    var items = App.state.elements.map(function (el, idx) {
       var cat = App.catOf(el.category);
-      var num = App.store.pinNumOf(el.id);
-      var pinned = num != null;
+      var num = App.store.pointNumber(el.id);
+      var placed = App.store.isPlaced(el.id);
       var placing = state.pinElementId === el.id;
+      var upDis = idx === 0 ? ' disabled' : '';
+      var downDis = idx === total - 1 ? ' disabled' : '';
       return '<div class="point-row' + (placing ? ' placing' : '') + '" data-elid="' + el.id + '">' +
-        '<span class="point-num" style="background:' + cat.color + '">' + (pinned ? num : '–') + '</span>' +
+        '<span class="point-reorder">' +
+          '<button type="button" class="point-move" data-moveup="' + el.id + '"' + upDis + ' title="上へ">▲</button>' +
+          '<button type="button" class="point-move" data-movedown="' + el.id + '"' + downDis + ' title="下へ">▼</button>' +
+        '</span>' +
+        '<span class="point-num" style="background:' + cat.color + '">' + num + '</span>' +
         '<span class="point-label">' + App.esc(el.label || '(名称未設定)') +
-          '<span class="point-meta">📷' + el.photos.length + '</span></span>' +
-        '<button type="button" class="point-act" data-place="' + el.id + '">' + (pinned ? '移動' : '配置') + '</button>' +
+          '<span class="point-meta">📷' + el.photos.length + (placed ? '' : ' <span class="unplaced">未配置</span>') + '</span></span>' +
+        '<button type="button" class="point-act" data-place="' + el.id + '">' + (placed ? '移動' : '配置') + '</button>' +
         '<button type="button" class="point-act" data-editel="' + el.id + '">編集</button>' +
       '</div>';
     }).join('');
@@ -392,6 +400,12 @@ window.App = window.App || {};
     if (addPointBtn) {
       addPointBtn.addEventListener('click', function () { App.input.openForm(null); });
     }
+    panel.querySelectorAll('[data-moveup]').forEach(function (btn) {
+      btn.addEventListener('click', function () { App.store.moveElement(btn.getAttribute('data-moveup'), -1); });
+    });
+    panel.querySelectorAll('[data-movedown]').forEach(function (btn) {
+      btn.addEventListener('click', function () { App.store.moveElement(btn.getAttribute('data-movedown'), 1); });
+    });
     panel.querySelectorAll('[data-place]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         if (!currentDrawing()) {

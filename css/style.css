@@ -341,6 +341,15 @@ textarea { resize: vertical; }
   border: 1px solid #e0e5e9; border-radius: 8px; padding: 6px 8px; background: #fff;
 }
 .point-row.placing { border-color: #1565c0; background: #e3f2fd; }
+.point-reorder { display: flex; flex-direction: column; gap: 3px; flex-shrink: 0; }
+.point-move {
+  width: 34px; height: 26px; padding: 0;
+  background: #eceff1; border: 1px solid #cfd8dc; border-radius: 6px;
+  color: #37474f; font-size: 12px; line-height: 1; cursor: pointer;
+}
+.point-move:disabled { opacity: 0.3; cursor: default; }
+.point-move:not(:disabled):active { background: #1565c0; border-color: #1565c0; color: #fff; }
+.unplaced { color: #b0bec5; }
 .point-num {
   display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border-radius: 50%; color: #fff;
@@ -395,6 +404,32 @@ textarea { resize: vertical; }
   background: rgba(38,50,56,.8); color: #fff; border-radius: 99px;
   padding: 3px 10px; font-size: 12px;
 }
+/* 職人ごとの対象外(✕)トグル */
+.thumb-exclude {
+  position: absolute; top: 6px; right: 6px; z-index: 2;
+  width: 30px; height: 30px; border-radius: 50%;
+  border: none; background: rgba(38,50,56,.82); color: #fff;
+  font-size: 15px; line-height: 1; cursor: pointer;
+}
+.annot-thumb.excluded { background: #e9edf0; }
+.annot-thumb.excluded img { filter: grayscale(1); opacity: 0.4; }
+.annot-thumb.excluded .annot-thumb-svg { opacity: 0.3; }
+.annot-thumb.excluded .thumb-exclude { background: #c62828; }
+.annot-thumb.excluded .annot-thumb-badge { background: #c62828; }
+
+/* 写真ドロップゾーン（間取りフォーム・依頼先ポイント共用） */
+.photo-dropzone {
+  border: 2px dashed #cfd8dc; border-radius: 10px; padding: 12px;
+  transition: border-color .15s, background .15s;
+}
+.photo-dropzone.dragover, .annot-point.dragover {
+  border-color: #1565c0; background: #e3f2fd;
+}
+.annot-point { transition: background .15s, box-shadow .15s; }
+.annot-point.dragover { box-shadow: inset 0 0 0 2px #1565c0; }
+.dz-hint { font-size: 12px; margin: 8px 0 0; }
+.annot-dz-hint { margin-top: 8px; }
+@media (max-width: 767px) { .annot-dz-hint { display: none; } }
 
 /* ============ 共通描画ツールバー（写真・間取り共用） ============ */
 .draw-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

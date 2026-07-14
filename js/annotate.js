@@ -294,26 +294,30 @@ window.App = window.App || {};
     }
 
     var html = points.map(function (el) {
-      var num = App.store.pinNumOf(el.id);
+      var num = App.store.pointNumber(el.id);
       var head = '<div class="annot-point-head">' +
-        '<span class="point-num" style="background:' + App.catOf(el.category).color + '">' + (num != null ? num : '–') + '</span>' +
+        '<span class="point-num" style="background:' + App.catOf(el.category).color + '">' + num + '</span>' +
         '<strong>' + App.esc(el.label) + '</strong>' +
         (el.locationText ? '<span class="muted"> ' + App.esc(el.locationText) + '</span>' : '') +
         '</div>';
       var photos;
       if (!el.photos.length) {
-        photos = '<p class="muted annot-nophoto">写真がありません（間取りタブでこの撮影ポイントに写真を追加）</p>';
+        photos = '<p class="muted annot-nophoto">写真がありません（ここに写真をドラッグ&ドロップ、または間取りタブで追加）</p>';
       } else {
         photos = '<div class="annot-thumbs">' + el.photos.map(function (p) {
           var n = ((p.annotations || {})[activeTrade] || []).length;
-          return '<div class="annot-thumb" data-photoid="' + p.id + '">' +
+          var excluded = App.store.isPhotoExcluded(p, activeTrade);
+          return '<div class="annot-thumb' + (excluded ? ' excluded' : '') + '" data-photoid="' + p.id + '">' +
             '<img src="' + p.dataUrl + '" alt="">' +
             '<span class="annot-thumb-svg"></span>' +
-            '<span class="annot-thumb-badge">' + (n ? '🖍 ' + n : '書き込む') + '</span>' +
+            '<button type="button" class="thumb-exclude" data-exclude="' + p.id + '" title="' + (excluded ? 'この職人の対象外を解除' : 'この職人の対象外にする（他職人・出力に影響なし）') + '">' + (excluded ? '↩' : '✕') + '</button>' +
+            '<span class="annot-thumb-badge">' + (excluded ? '対象外' : (n ? '🖍 ' + n : '書き込む')) + '</span>' +
           '</div>';
         }).join('') + '</div>';
       }
-      return '<div class="annot-point">' + head + photos + '</div>';
+      return '<div class="annot-point" data-elid="' + el.id + '">' + head + photos +
+        '<p class="muted dz-hint annot-dz-hint">PCはこの箇所に写真をドラッグ&ドロップで追加できます</p>' +
+        '</div>';
     }).join('');
     body.innerHTML = html;
 
@@ -326,7 +330,45 @@ window.App = window.App || {};
           if (holder) holder.appendChild(App.annot.buildOverlay(found.photo, activeTrade));
         });
       }
-      thumb.addEventListener('click', function () { App.annot.openEditor(pid, activeTrade); });
+      thumb.addEventListener('click', function (e) {
+        if (e.target.closest('.thumb-exclude')) return;
+        App.annot.openEditor(pid, activeTrade);
+      });
+    });
+
+    /* ✕ 対象外トグル（職人ごと独立） */
+    body.querySelectorAll('[data-exclude]').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var found = App.store.getPhoto(btn.getAttribute('data-exclude'));
+        if (!found) return;
+        var nowExcluded = App.store.togglePhotoExcluded(found.photo, activeTrade);
+        App.ui.toast(nowExcluded ? 'この職人の対象外にしました' : '対象外を解除しました');
+      });
+    });
+
+    /* 撮影ポイントへの写真ドラッグ&ドロップ（PC） */
+    body.querySelectorAll('.annot-point').forEach(function (pt) {
+      var elid = pt.getAttribute('data-elid');
+      ['dragenter', 'dragover'].forEach(function (ev) {
+        pt.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); pt.classList.add('dragover'); });
+      });
+      ['dragleave', 'dragend'].forEach(function (ev) {
+        pt.addEventListener(ev, function (e) { if (e.target === pt) pt.classList.remove('dragover'); });
+      });
+      pt.addEventListener('drop', function (e) {
+        e.preventDefault(); e.stopPropagation(); pt.classList.remove('dragover');
+        if (!(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length)) return;
+        var el = App.store.getElement(elid);
+        if (!el) return;
+        App.ui.toast('写真を取り込み中…');
+        App.photo.importFiles(e.dataTransfer.files).then(function (photos) {
+          if (!photos.length) return;
+          el.photos = el.photos.concat(photos);
+          App.store.commit();
+          App.ui.toast('写真を追加しました（' + photos.length + '枚）');
+        }).catch(function (err) { App.ui.toast('⚠ ' + err.message); });
+      });
     });
   }
 

@@ -65,9 +65,9 @@ window.App = window.App || {};
     root.innerHTML = '<p class="empty-note">プレビューを作成中…</p>';
     printBtn.disabled = true;
 
-    /* 全対象写真の実寸を保証してからDOM構築 */
+    /* 全対象写真の実寸を保証してからDOM構築（対象外は除外） */
     var allPhotos = [];
-    points.forEach(function (el) { el.photos.forEach(function (p) { allPhotos.push(p); }); });
+    points.forEach(function (el) { App.store.photosForTrade(el, trade).forEach(function (p) { allPhotos.push(p); }); });
 
     Promise.all(allPhotos.map(function (p) { return App.photo.ensureDims(p); })).then(function () {
       if (token !== renderToken) return; /* 途中で選択が変わった */
@@ -119,20 +119,22 @@ window.App = window.App || {};
 
     /* 各ポイント：写真を大きく＋書き込み＋情報 */
     points.forEach(function (el) {
-      var num = App.store.pinNumOf(el.id);
+      var num = App.store.pointNumber(el.id);
       var block = document.createElement('div');
       block.className = 'print-point';
 
       var head = document.createElement('div');
       head.className = 'print-point-head';
       head.innerHTML =
-        '<span class="point-num" style="background:' + App.catOf(el.category).color + '">' + (num != null ? num : '–') + '</span>' +
+        '<span class="point-num" style="background:' + App.catOf(el.category).color + '">' + num + '</span>' +
         '<strong>' + App.esc(el.label) + '</strong>' +
         (el.locationText ? '<span class="muted"> ' + App.esc(el.locationText) + '</span>' : '');
       block.appendChild(head);
 
-      if (el.photos.length) {
-        el.photos.forEach(function (ph) {
+      /* その職人にとって対象外(✕)の写真は出力に含めない */
+      var outPhotos = App.store.photosForTrade(el, trade);
+      if (outPhotos.length) {
+        outPhotos.forEach(function (ph) {
           var pw = document.createElement('div');
           pw.className = 'print-photo';
           var img = document.createElement('img');

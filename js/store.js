@@ -113,7 +113,10 @@ window.App = window.App || {};
       if (bg.scale == null) bg.scale = 1;
       if (bg.naturalW == null) bg.naturalW = 0;
       if (bg.naturalH == null) bg.naturalH = 0;
+      if (!Array.isArray(dw.strokes)) dw.strokes = [];
+      if (!Array.isArray(dw.dims)) dw.dims = [];
       if (!Array.isArray(dw.annotations)) dw.annotations = [];
+      if (!Array.isArray(dw.pins)) dw.pins = [];
     });
 
     var usedTrades = {};
@@ -121,6 +124,7 @@ window.App = window.App || {};
       (el.trades || []).forEach(function (t) { usedTrades[t] = true; });
       (el.photos || []).forEach(function (p) {
         if (!p.annotations || typeof p.annotations !== 'object') p.annotations = {};
+        if (!Array.isArray(p.excludedFor)) p.excludedFor = [];
       });
     });
 
@@ -373,10 +377,31 @@ window.App = window.App || {};
       return out;
     },
 
-    /* 要素の代表ピン番号（複数図面にある場合は最初のもの）。未配置は null */
+    /* 撮影ポイントの番号＝一覧（elements配列）の並び順。①②③…はここが唯一の基準。
+       間取りピン・情報カード・依頼先・出力すべてこの番号を使う */
+    pointNumber: function (elementId) {
+      var i = App.state.elements.findIndex(function (e) { return e.id === elementId; });
+      return i === -1 ? null : i + 1;
+    },
+    isPlaced: function (elementId) {
+      return App.store.pinsOfElement(elementId).length > 0;
+    },
+
+    /* 撮影ポイントを1つ上(dir=-1)／下(dir=+1)へ入れ替え。番号は並び順から自動再計算 */
+    moveElement: function (elementId, dir) {
+      var arr = App.state.elements;
+      var i = arr.findIndex(function (e) { return e.id === elementId; });
+      if (i === -1) return false;
+      var j = i + dir;
+      if (j < 0 || j >= arr.length) return false;
+      var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+      App.store.commit();
+      return true;
+    },
+
+    /* 旧API互換：配置済みなら番号、未配置は null（既存呼び出し向け） */
     pinNumOf: function (elementId) {
-      var pins = App.store.pinsOfElement(elementId);
-      return pins.length ? pins[0].pin.num : null;
+      return App.store.isPlaced(elementId) ? App.store.pointNumber(elementId) : null;
     },
 
     /* ---- 写真 ---- */
@@ -396,6 +421,22 @@ window.App = window.App || {};
       if (!photo.annotations) photo.annotations = {};
       if (!Array.isArray(photo.annotations[trade])) photo.annotations[trade] = [];
       return photo.annotations[trade];
+    },
+
+    /* photo × 職人タグ の「対象外」フラグ（職人ごと独立・写真は複製しない） */
+    isPhotoExcluded: function (photo, trade) {
+      return (photo.excludedFor || []).indexOf(trade) !== -1;
+    },
+    togglePhotoExcluded: function (photo, trade) {
+      if (!Array.isArray(photo.excludedFor)) photo.excludedFor = [];
+      var i = photo.excludedFor.indexOf(trade);
+      if (i === -1) photo.excludedFor.push(trade); else photo.excludedFor.splice(i, 1);
+      App.store.commit();
+      return i === -1; /* trueなら対象外にした */
+    },
+    /* 指定職人にとって出力対象の写真だけ返す */
+    photosForTrade: function (el, trade) {
+      return (el.photos || []).filter(function (p) { return (p.excludedFor || []).indexOf(trade) === -1; });
     },
 
     /* ---- 依頼先（職人タグ） ---- */
@@ -420,18 +461,12 @@ window.App = window.App || {};
       App.store.commit();
     },
 
-    /* 指定職人が担当する要素（表示ON・当該タグ保持）をピン番号順で返す */
+    /* 指定職人が担当する要素（表示ON・当該タグ保持）を一覧の並び順（新番号順）で返す。
+       filterは配列順を保持するため、そのままが①②③…の順 */
     pointsForTrade: function (trade) {
-      var out = App.state.elements.filter(function (el) {
+      return App.state.elements.filter(function (el) {
         return el.visible && el.trades.indexOf(trade) !== -1;
       });
-      out.sort(function (a, b) {
-        var na = App.store.pinNumOf(a.id), nb = App.store.pinNumOf(b.id);
-        if (na == null) na = Infinity;
-        if (nb == null) nb = Infinity;
-        return na - nb;
-      });
-      return out;
     },
 
     /* ---- JSONエクスポート／インポート ----

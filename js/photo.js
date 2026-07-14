@@ -42,6 +42,24 @@ window.App = window.App || {};
       return resize(file, maxSide, quality);
     },
 
+    /* 複数の画像File → 写真オブジェクト配列（縮小・圧縮・実寸付き）。
+       ファイル選択・ドラッグ&ドロップ共用。画像以外は無視 */
+    importFiles: function (fileList) {
+      var files = Array.prototype.slice.call(fileList || []).filter(function (f) {
+        return f && f.type && f.type.indexOf('image/') === 0;
+      });
+      var out = [];
+      var chain = Promise.resolve();
+      files.forEach(function (file) {
+        chain = chain.then(function () {
+          return App.photo.fileToDataUrlSized(file, 1280, 0.65).then(function (r) {
+            out.push({ id: App.uid('ph'), dataUrl: r.dataUrl, caption: '', w: r.width, h: r.height, annotations: {}, excludedFor: [] });
+          });
+        });
+      });
+      return chain.then(function () { return out; });
+    },
+
     /* 写真オブジェクトの実ピクセル寸法(w,h)を保証して返す。
        旧データ(w/h無し)はdataUrlから読み込んで補完・保存する。
        書き込みレイヤーのviewBox座標系に使用 */

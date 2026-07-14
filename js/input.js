@@ -83,8 +83,11 @@ window.App = window.App || {};
           '<textarea id="f-instruction" rows="3" placeholder="職人への指示・注意点">' + App.esc(el ? el.instruction : '') + '</textarea></label>' +
         '<div class="field"><span class="field-label">写真</span>' +
           '<p class="muted field-note">寸法は依頼先タブで写真に「寸法」書き込みとして記入します。</p>' +
-          '<div id="f-photos" class="photo-grid"></div>' +
-          '<button type="button" class="btn" data-act="add-photo">📷 写真を追加</button>' +
+          '<div id="f-dropzone" class="photo-dropzone">' +
+            '<div id="f-photos" class="photo-grid"></div>' +
+            '<button type="button" class="btn" data-act="add-photo">📷 写真を追加（複数可）</button>' +
+            '<p class="muted dz-hint">PCはここに写真をまとめてドラッグ&ドロップ／スマホはボタンから複数選択</p>' +
+          '</div>' +
           '<input type="file" id="f-photo-input" accept="image/*" multiple hidden>' +
         '</div>' +
         '<label class="field field-inline"><input type="checkbox" id="f-visible"' +
@@ -119,25 +122,32 @@ window.App = window.App || {};
     box.querySelector('[data-act="add-photo"]').addEventListener('click', function () {
       photoInput.click();
     });
-    photoInput.addEventListener('change', function () {
-      var files = Array.from(photoInput.files || []);
-      photoInput.value = '';
-      if (!files.length) return;
+    function intakeFiles(fileList) {
+      var imgs = Array.prototype.slice.call(fileList || []).filter(function (f) { return f.type && f.type.indexOf('image/') === 0; });
+      if (!imgs.length) return;
       App.ui.toast('写真を取り込み中…');
-      var chain = Promise.resolve();
-      files.forEach(function (file) {
-        chain = chain.then(function () {
-          return App.photo.fileToDataUrlSized(file, 1280, 0.65).then(function (r) {
-            photos.push({ id: App.uid('ph'), dataUrl: r.dataUrl, caption: '', w: r.width, h: r.height, annotations: {} });
-            renderPhotos();
-          });
-        });
-      });
-      chain.then(function () {
-        App.ui.toast('写真を追加しました（' + files.length + '枚）');
-      }).catch(function (err) {
-        App.ui.toast('⚠ ' + err.message);
-      });
+      App.photo.importFiles(imgs).then(function (newPhotos) {
+        newPhotos.forEach(function (p) { photos.push(p); });
+        renderPhotos();
+        App.ui.toast('写真を追加しました（' + newPhotos.length + '枚）');
+      }).catch(function (err) { App.ui.toast('⚠ ' + err.message); });
+    }
+    photoInput.addEventListener('change', function () {
+      var files = photoInput.files; photoInput.value = '';
+      intakeFiles(files);
+    });
+
+    /* ドラッグ&ドロップ（PC） */
+    var dz = box.querySelector('#f-dropzone');
+    ['dragenter', 'dragover'].forEach(function (ev) {
+      dz.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); dz.classList.add('dragover'); });
+    });
+    ['dragleave', 'dragend'].forEach(function (ev) {
+      dz.addEventListener(ev, function (e) { e.preventDefault(); e.stopPropagation(); if (e.target === dz) dz.classList.remove('dragover'); });
+    });
+    dz.addEventListener('drop', function (e) {
+      e.preventDefault(); e.stopPropagation(); dz.classList.remove('dragover');
+      if (e.dataTransfer && e.dataTransfer.files) intakeFiles(e.dataTransfer.files);
     });
 
     /* --- 保存・削除・閉じる ---

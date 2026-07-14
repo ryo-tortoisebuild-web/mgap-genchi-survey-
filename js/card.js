@@ -19,8 +19,9 @@ window.App = window.App || {};
   function locationLine(el) {
     var parts = [];
     if (el.locationText) parts.push(el.locationText);
+    var num = App.store.pointNumber(el.id);
     App.store.pinsOfElement(el.id).forEach(function (info) {
-      parts.push(info.drawing.title + ' ピン' + info.pin.num);
+      parts.push(info.drawing.title + ' ピン' + num);
     });
     return parts.join(' ／ ');
   }
@@ -82,12 +83,8 @@ window.App = window.App || {};
     opts = opts || {};
     var el = App.store.getElement(elementId);
     if (!el) return;
-    var pinNum = null;
-    if (opts.pinId && opts.drawingId) {
-      var dw = App.store.getDrawing(opts.drawingId);
-      var pin = dw && dw.pins.find(function (p) { return p.id === opts.pinId; });
-      if (pin) pinNum = pin.num;
-    }
+    /* 番号は一覧の並び順（配置済みのときだけ表示） */
+    var pinNum = App.store.isPlaced(elementId) ? App.store.pointNumber(elementId) : null;
 
     var box = document.createElement('div');
     box.className = 'card-modal';
