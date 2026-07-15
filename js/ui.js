@@ -52,6 +52,23 @@ window.App = window.App || {};
     }, duration || 3000);
   };
 
+  /* ---- 背景ページのスクロール固定（モーダル表示中）----
+     iOS Safari対策：body を position:fixed で固定し、閉じたら位置を復元。
+     モーダルが1つでも開いている間は固定を維持する */
+  var scrollLockY = 0;
+  function lockBodyScroll() {
+    if (document.body.classList.contains('modal-open')) return;
+    scrollLockY = window.scrollY || window.pageYOffset || 0;
+    document.body.style.top = (-scrollLockY) + 'px';
+    document.body.classList.add('modal-open');
+  }
+  function unlockBodyScroll() {
+    if (!document.body.classList.contains('modal-open')) return;
+    document.body.classList.remove('modal-open');
+    document.body.style.top = '';
+    window.scrollTo(0, scrollLockY);
+  }
+
   /* ---- モーダル ----
      openModal(contentEl or html) → モーダル要素を返す。closeModal()で閉じる */
   App.ui.openModal = function (content, opts) {
@@ -64,6 +81,7 @@ window.App = window.App || {};
     if (typeof content === 'string') box.innerHTML = content;
     else box.appendChild(content);
     overlay.appendChild(box);
+    lockBodyScroll();
     root.appendChild(overlay);
     overlay.addEventListener('click', function (e) {
       if (e.target !== overlay) return;
@@ -74,11 +92,10 @@ window.App = window.App || {};
   };
 
   App.ui.closeModal = function (overlay) {
+    var root = document.getElementById('modal-root');
     if (overlay && overlay.parentNode) overlay.remove();
-    else {
-      var root = document.getElementById('modal-root');
-      if (root.lastElementChild) root.lastElementChild.remove();
-    }
+    else if (root.lastElementChild) root.lastElementChild.remove();
+    if (root.children.length === 0) unlockBodyScroll();
   };
 
   /* ---- 確認ダイアログ ---- */

@@ -208,6 +208,8 @@ window.App = window.App || {};
     svg.addEventListener('pointermove', onMove);
     svg.addEventListener('pointerup', onUp);
     svg.addEventListener('pointercancel', onUp);
+    /* iOS対策：描画/操作中はタッチのスクロール・バウンスを完全に抑止（非パッシブ） */
+    svg.addEventListener('touchmove', function (e) { if (drag) e.preventDefault(); }, { passive: false });
 
     /* --- クリア・閉じる --- */
     box.querySelector('[data-act="clear"]').addEventListener('click', function () {

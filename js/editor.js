@@ -1007,6 +1007,8 @@ window.App = window.App || {};
     svg.addEventListener('pointermove', onPointerMove);
     svg.addEventListener('pointerup', onPointerUp);
     svg.addEventListener('pointercancel', onPointerUp);
+    /* iOS対策：ドラッグ操作中はタッチのスクロール・バウンスを抑止（非パッシブ） */
+    svg.addEventListener('touchmove', function (e) { if (state.drag) e.preventDefault(); }, { passive: false });
 
     document.addEventListener('keydown', function (e) {
       if (App.ui.currentTab() !== 'map') return;
