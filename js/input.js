@@ -122,18 +122,21 @@ window.App = window.App || {};
     box.querySelector('[data-act="add-photo"]').addEventListener('click', function () {
       photoInput.click();
     });
-    function intakeFiles(fileList) {
-      var imgs = Array.prototype.slice.call(fileList || []).filter(function (f) { return f.type && f.type.indexOf('image/') === 0; });
-      if (!imgs.length) return;
+    function intakeFiles(files) {
+      if (!files.length) return;
       App.ui.toast('写真を取り込み中…');
-      App.photo.importFiles(imgs).then(function (newPhotos) {
+      App.photo.importFiles(files).then(function (newPhotos) {
+        if (!newPhotos.length) { App.ui.toast('⚠ 写真を取り込めませんでした'); return; }
         newPhotos.forEach(function (p) { photos.push(p); });
         renderPhotos();
         App.ui.toast('写真を追加しました（' + newPhotos.length + '枚）');
       }).catch(function (err) { App.ui.toast('⚠ ' + err.message); });
     }
     photoInput.addEventListener('change', function () {
-      var files = photoInput.files; photoInput.value = '';
+      /* iOS Safari対策：input.value をクリアする前に配列へスナップショットする。
+         photoInput.files はライブ参照で、value='' すると空になるため */
+      var files = Array.prototype.slice.call(photoInput.files || []);
+      photoInput.value = '';
       intakeFiles(files);
     });
 
@@ -147,7 +150,7 @@ window.App = window.App || {};
     });
     dz.addEventListener('drop', function (e) {
       e.preventDefault(); e.stopPropagation(); dz.classList.remove('dragover');
-      if (e.dataTransfer && e.dataTransfer.files) intakeFiles(e.dataTransfer.files);
+      if (e.dataTransfer && e.dataTransfer.files) intakeFiles(Array.prototype.slice.call(e.dataTransfer.files));
     });
 
     /* --- 保存・削除・閉じる ---

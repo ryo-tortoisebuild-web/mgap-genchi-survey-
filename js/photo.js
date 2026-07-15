@@ -43,10 +43,12 @@ window.App = window.App || {};
     },
 
     /* 複数の画像File → 写真オブジェクト配列（縮小・圧縮・実寸付き）。
-       ファイル選択・ドラッグ&ドロップ共用。画像以外は無視 */
+       ファイル選択・ドラッグ&ドロップ共用。
+       iOS対策：type が空の File も受け入れる（accept=image/* 経由や一部の共有元で
+       File.type が空になることがあるため）。読み込めない1枚はスキップして継続 */
     importFiles: function (fileList) {
       var files = Array.prototype.slice.call(fileList || []).filter(function (f) {
-        return f && f.type && f.type.indexOf('image/') === 0;
+        return f && (!f.type || f.type.indexOf('image/') === 0);
       });
       var out = [];
       var chain = Promise.resolve();
@@ -54,7 +56,7 @@ window.App = window.App || {};
         chain = chain.then(function () {
           return App.photo.fileToDataUrlSized(file, 1280, 0.65).then(function (r) {
             out.push({ id: App.uid('ph'), dataUrl: r.dataUrl, caption: '', w: r.width, h: r.height, annotations: {}, excludedFor: [] });
-          });
+          }).catch(function () { /* この1枚は読み込み失敗→スキップして継続 */ });
         });
       });
       return chain.then(function () { return out; });
