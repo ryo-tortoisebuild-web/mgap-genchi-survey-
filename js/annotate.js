@@ -36,7 +36,13 @@ window.App = window.App || {};
         '<div class="annot-drawtools"></div>' +
         '<div class="annot-utils">' +
           '<button type="button" class="tool-btn" data-util="select">☝ 選択</button>' +
+          '<button type="button" class="tool-btn" data-util="pan">✋ 移動</button>' +
           '<button type="button" class="tool-btn tool-btn-delete" data-util="delete">🗑 削除</button>' +
+          '<span class="annot-zoom">' +
+            '<button type="button" class="tool-btn" data-zoom="out" title="縮小">－</button>' +
+            '<button type="button" class="tool-btn" data-zoom="in" title="拡大">＋ 拡大</button>' +
+            '<button type="button" class="tool-btn" data-zoom="reset" title="等倍に戻す">等倍</button>' +
+          '</span>' +
         '</div>' +
       '</div>' +
       '<div class="annot-stage">' +
@@ -54,6 +60,25 @@ window.App = window.App || {};
 
     var overlay = App.ui.openModal(box, { full: true, noBackdropClose: true });
     var svg = box.querySelector('.annot-draw');
+    var stage = box.querySelector('.annot-stage');
+    var inner = box.querySelector('.annot-stage-inner');
+
+    /* 表示ズーム（見た目のみ。描画座標はviewBox基準のまま＝保存データはズレない） */
+    var zoom = 1, tx = 0, ty = 0;
+    function applyView() { inner.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + zoom + ')'; }
+    function zoomBy(f) {
+      var sw = stage.clientWidth, sh = stage.clientHeight;
+      var nz = Math.max(1, Math.min(6, zoom * f));
+      var af = nz / zoom;
+      /* 画面中央の点を保持したまま拡縮 */
+      tx = sw / 2 - (sw / 2 - tx) * af;
+      ty = sh / 2 - (sh / 2 - ty) * af;
+      zoom = nz;
+      if (zoom === 1) { tx = 0; ty = 0; } /* 等倍に戻ったら位置もリセット */
+      applyView();
+      repaint(); /* ハンドルを画面上一定サイズで再描画 */
+    }
+    function resetView() { zoom = 1; tx = 0; ty = 0; applyView(); repaint(); }
 
     function list() { return App.store.annotationsOf(photo, trade); }
     function selectedAnnot() { return selectedId ? list().find(function (a) { return a.id === selectedId; }) : null; }
@@ -92,6 +117,9 @@ window.App = window.App || {};
     box.querySelectorAll('[data-util]').forEach(function (btn) {
       btn.addEventListener('click', function () { tool = btn.getAttribute('data-util'); clearSelect(); updateUtil(); });
     });
+    box.querySelector('[data-zoom="in"]').addEventListener('click', function () { zoomBy(1.3); });
+    box.querySelector('[data-zoom="out"]').addEventListener('click', function () { zoomBy(1 / 1.3); });
+    box.querySelector('[data-zoom="reset"]').addEventListener('click', function () { resetView(); });
 
     function clearSelect() { selectedId = null; repaint(); }
     function removeById(id) {
@@ -122,6 +150,12 @@ window.App = window.App || {};
       if (e.button !== undefined && e.button !== 0) return;
       e.preventDefault();
       try { svg.setPointerCapture(e.pointerId); } catch (err) {}
+
+      /* ✋移動ツール：ドラッグで表示位置を移動（画面px基準・描画データには影響しない） */
+      if (tool === 'pan') {
+        drag = { type: 'pan', sx: e.clientX, sy: e.clientY, tx0: tx, ty0: ty };
+        return;
+      }
       var pt = toSvg(e);
 
       /* ハンドル優先（選択中の図形のみ） */
@@ -153,6 +187,7 @@ window.App = window.App || {};
     function onMove(e) {
       if (!drag) return;
       e.preventDefault();
+      if (drag.type === 'pan') { tx = drag.tx0 + (e.clientX - drag.sx); ty = drag.ty0 + (e.clientY - drag.sy); applyView(); return; }
       var pt = toSvg(e);
       if (drag.type === 'draw') { App.draw.updateDraft(drag.draft, pt); repaint(drag.draft); return; }
       if (drag.type === 'handle') { var a = selectedAnnot(); if (a) { App.draw.applyHandleDrag(a, drag.role, pt, drag.orig, W, H); repaint(); } return; }

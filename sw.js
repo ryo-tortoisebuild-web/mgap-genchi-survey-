@@ -1,7 +1,7 @@
 /* 最小Service Worker：ネットワーク優先＋オフライン時のみキャッシュ利用。
    （cache-firstだとアプリ更新が届かなくなるためnetwork-first）
    完全オフライン対応はスコープ外。失敗しても本体機能に影響しない */
-var CACHE = 'genchi-survey-v11';
+var CACHE = 'genchi-survey-v12';
 var CORE = [
   './',
   './index.html',
