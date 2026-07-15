@@ -69,7 +69,7 @@ window.App = window.App || {};
     if (el.photos.length) {
       html += '<div class="card-section"><h4>写真</h4><div class="card-photos">' +
         el.photos.map(function (p) {
-          return '<img src="' + p.dataUrl + '" alt="" data-photo-zoom>';
+          return '<img src="' + App.photoSrc(p) + '" alt="" data-photo-zoom>';
         }).join('') +
       '</div></div>';
     }

@@ -87,7 +87,8 @@ window.App = window.App || {};
     }
 
     // 間取り画像（背景）：位置(x,y)と拡縮(scale)を反映。旧データ(naturalW/H無し)は従来通りキャンバス全面フィット
-    if (dw.background.dataUrl && !opts.hideBg) {
+    var bgSrc = App.bgSrc(dw.background);
+    if (bgSrc && !opts.hideBg) {
       var bg = dw.background;
       var bw = (bg.naturalW || CANVAS_W) * (bg.scale || 1);
       var bh = (bg.naturalH || CANVAS_H) * (bg.scale || 1);
@@ -97,8 +98,8 @@ window.App = window.App || {};
         preserveAspectRatio: 'xMidYMid meet',
         'data-kind': 'bg',
       });
-      img.setAttributeNS('http://www.w3.org/1999/xlink', 'href', bg.dataUrl);
-      img.setAttribute('href', bg.dataUrl);
+      img.setAttributeNS('http://www.w3.org/1999/xlink', 'href', bgSrc);
+      img.setAttribute('href', bgSrc);
       target.appendChild(img);
     }
 
@@ -371,7 +372,7 @@ window.App = window.App || {};
     if (dw) {
       /* 間取り画像（背景） */
       html += '<div class="panel-section"><h3>間取り画像（背景）</h3>';
-      if (dw.background.dataUrl) {
+      if (App.bgSrc(dw.background)) {
         html +=
           '<div class="bg-zoom-row">' +
             '<button type="button" class="btn btn-small" id="btn-bg-zoom-out">－ 縮小</button>' +
@@ -459,6 +460,7 @@ window.App = window.App || {};
         App.ui.toast('間取り画像を取り込み中…');
         App.photo.fileToDataUrlSized(file, 1600, 0.75).then(function (r) {
           dw.background.dataUrl = r.dataUrl;
+          dw.background.url = null;  /* 差し替え時は旧サーバーURLを無効化（再アップロード） */
           dw.background.naturalW = r.width;
           dw.background.naturalH = r.height;
           fitBackground(dw);  /* 読み込んだらまず画面いっぱいにフィット配置 */
@@ -480,6 +482,7 @@ window.App = window.App || {};
     if (bgRemove) {
       bgRemove.addEventListener('click', function () {
         dw.background.dataUrl = null;
+        dw.background.url = null;
         App.store.commit();
       });
     }
@@ -657,7 +660,7 @@ window.App = window.App || {};
     }
 
     if (state.mode === 'bg') {
-      if (!dw.background.dataUrl) {
+      if (!App.bgSrc(dw.background)) {
         App.ui.toast('先に右のパネルで間取り画像を設定してください');
         return;
       }

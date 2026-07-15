@@ -138,7 +138,7 @@ window.App = window.App || {};
           var pw = document.createElement('div');
           pw.className = 'print-photo';
           var img = document.createElement('img');
-          img.src = ph.dataUrl;
+          img.src = App.photoSrc(ph);
           pw.appendChild(img);
           pw.appendChild(App.annot.buildOverlay(ph, trade));
           block.appendChild(pw);

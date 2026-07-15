@@ -552,3 +552,37 @@ body.modal-open { position: fixed; left: 0; right: 0; width: 100%; overflow: hid
   padding: 8px 12px; margin: 6px 0;
 }
 .pi-instruction .pi-key { display: block; color: #e65100; margin-bottom: 2px; }
+
+/* ---- アカウント表示（ヘッダー） ---- */
+.account-area[hidden], .login-overlay[hidden] { display: none; }
+.account-area { display: inline-flex; align-items: center; gap: 8px; }
+.account-area .acct-name {
+  color: #fff; font-size: 13px; background: rgba(255,255,255,.14);
+  border-radius: 6px; padding: 4px 8px; white-space: nowrap;
+}
+
+/* ---- ログイン画面（全画面オーバーレイ） ---- */
+.login-overlay {
+  position: fixed; inset: 0; z-index: 2000;
+  background: #37474f;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.login-box {
+  background: #fff; border-radius: 14px; padding: 28px 24px;
+  width: 100%; max-width: 360px; box-shadow: 0 10px 40px rgba(0,0,0,.35);
+}
+.login-title { font-size: 20px; margin: 0 0 4px; text-align: center; }
+.login-sub { color: #607d8b; font-size: 14px; text-align: center; margin: 0 0 18px; }
+.login-note {
+  background: #e3f2fd; color: #1565c0; border-radius: 8px;
+  padding: 8px 12px; font-size: 13px; margin: 0 0 14px; text-align: center;
+}
+.login-field { display: block; margin-bottom: 14px; }
+.login-field > span { display: block; font-size: 13px; color: #455a64; margin-bottom: 5px; }
+.login-field input {
+  width: 100%; box-sizing: border-box; padding: 11px 12px; font-size: 16px;
+  border: 1px solid #cfd8dc; border-radius: 8px;
+}
+.login-error { color: #c62828; font-size: 13px; margin: 0 0 12px; }
+.btn-block { width: 100%; padding: 12px; font-size: 16px; }

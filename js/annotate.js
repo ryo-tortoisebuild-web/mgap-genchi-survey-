@@ -47,7 +47,7 @@ window.App = window.App || {};
       '</div>' +
       '<div class="annot-stage">' +
         '<div class="annot-stage-inner">' +
-          '<img class="annot-photo" src="' + photo.dataUrl + '" alt="">' +
+          '<img class="annot-photo" src="' + App.photoSrc(photo) + '" alt="">' +
           '<svg class="annot-svg annot-draw"></svg>' +
         '</div>' +
       '</div>' +
@@ -345,7 +345,7 @@ window.App = window.App || {};
           var n = ((p.annotations || {})[activeTrade] || []).length;
           var excluded = App.store.isPhotoExcluded(p, activeTrade);
           return '<div class="annot-thumb' + (excluded ? ' excluded' : '') + '" data-photoid="' + p.id + '">' +
-            '<img src="' + p.dataUrl + '" alt="">' +
+            '<img src="' + App.photoSrc(p) + '" alt="">' +
             '<span class="annot-thumb-svg"></span>' +
             '<button type="button" class="thumb-exclude" data-exclude="' + p.id + '" title="' + (excluded ? 'この職人の対象外を解除' : 'この職人の対象外にする（他職人・出力に影響なし）') + '">' + (excluded ? '↩' : '✕') + '</button>' +
             '<span class="annot-thumb-badge">' + (excluded ? '対象外' : (n ? '🖍 ' + n : '書き込む')) + '</span>' +

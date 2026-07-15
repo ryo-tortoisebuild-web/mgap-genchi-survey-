@@ -24,6 +24,13 @@ window.App = window.App || {};
     },
   };
 
+  /* ---- 画像の表示元 ----
+     ローカルで撮影した写真は dataUrl（Base64・即時表示・オフライン可）を持つ。
+     他端末で登録されサーバー経由で来た写真は url（サーバー上のファイル）を持つ。
+     表示側は必ずこのヘルパー経由で src を取る（dataUrl優先→url） */
+  App.photoSrc = function (p) { return (p && (p.dataUrl || p.url)) || ''; };
+  App.bgSrc = function (bg) { return (bg && (bg.dataUrl || bg.url)) || ''; };
+
   /* ---- ID生成 ---- */
   App.uid = function (prefix) {
     var body = (window.crypto && crypto.randomUUID)
@@ -514,4 +521,61 @@ window.App = window.App || {};
       });
     },
   };
+
+  /* ======================================================================
+     サーバー同期サポート（js/sync.js から使用）
+     ・doc単位でサーバーに保存／取得する。写真Base64はサーバーには送らずURLで持つ。
+     ・updatedAt(サーバー時刻・エポックms)で新旧を判定（最終書き込み優先）。
+     ====================================================================== */
+
+  /* 全物件のドキュメントを返す（ログイン直後の一括アップロード用） */
+  App.store.getAllDocs = function () {
+    var ids = Object.keys(projectIndex);
+    return Promise.all(ids.map(function (id) { return idbGet(id); }))
+      .then(function (docs) { return docs.filter(function (d) { return d && d.app === APP_ID; }); });
+  };
+
+  /* updatedAtを変えずに保存（写真URL付与など、内容変更でない更新用）。再送ループ防止 */
+  App.store.persistQuiet = function (doc) {
+    doc = doc || App.state;
+    if (!doc) return Promise.resolve();
+    projectIndex[doc.project.id] = indexEntry(doc);
+    return idbPut(doc, doc.project.id).then(function () { return idbPut(projectIndex, INDEX_KEY); });
+  };
+
+  /* サーバーから来たドキュメントをローカルへ反映（上書き）。開いている物件なら画面も更新 */
+  App.store.applyRemoteDoc = function (doc) {
+    if (!doc || doc.app !== APP_ID) return Promise.resolve();
+    normalizeDoc(doc);
+    projectIndex[doc.project.id] = indexEntry(doc);
+    var isCurrent = App.state && App.state.project.id === doc.project.id;
+    return idbPut(doc, doc.project.id)
+      .then(function () { return idbPut(projectIndex, INDEX_KEY); })
+      .then(function () {
+        if (isCurrent) App.state = doc;
+        App.events.emit('change');
+      });
+  };
+
+  /* サーバーで削除された物件をローカルからも消す */
+  App.store.removeRemoteDoc = function (projectId) {
+    if (!projectIndex[projectId]) return Promise.resolve();
+    delete projectIndex[projectId];
+    var wasCurrent = App.state && App.state.project.id === projectId;
+    return idbDel(projectId).then(function () { return idbPut(projectIndex, INDEX_KEY); })
+      .then(function () {
+        if (!wasCurrent) { App.events.emit('change'); return; }
+        var list = sortedIndex();
+        if (list.length) return loadProject(list[0].id);
+        App.state = newDoc();
+        idbPut(App.state.project.id, LAST_KEY).catch(function () {});
+        return persist(App.state).then(function () { App.events.emit('change'); });
+      });
+  };
+
+  /* 同期メタ（物件UID→最後に取り込んだサーバー時刻）。自分の書き込みを再取得しないため */
+  App.store.getSyncMeta = function () {
+    return idbGet('syncMeta').then(function (m) { return (m && typeof m === 'object') ? m : {}; });
+  };
+  App.store.setSyncMeta = function (m) { return idbPut(m, 'syncMeta'); };
 })();

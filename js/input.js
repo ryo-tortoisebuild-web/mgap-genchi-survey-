@@ -106,7 +106,7 @@ window.App = window.App || {};
     function renderPhotos() {
       var grid = box.querySelector('#f-photos');
       grid.innerHTML = photos.map(function (p, i) {
-        return '<div class="photo-thumb"><img src="' + p.dataUrl + '" alt="">' +
+        return '<div class="photo-thumb"><img src="' + App.photoSrc(p) + '" alt="">' +
           '<button type="button" class="photo-del" data-photo-del="' + i + '">✕</button></div>';
       }).join('');
       grid.querySelectorAll('[data-photo-del]').forEach(function (btn) {

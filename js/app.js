@@ -8,6 +8,8 @@ document.addEventListener('DOMContentLoaded', function () {
     App.annot.init();
     App.output.init();
     App.ui.initTabs();
+    /* サーバー同期（apiBase未設定なら何もしない＝従来どおり端末内保存） */
+    if (App.auth) App.auth.init();
   });
 
   /* Service Worker（https/localhost配信時のみ。失敗しても無視） */

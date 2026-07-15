@@ -8,3 +8,9 @@ Thumbs.db
 # 利用者データは端末内(IndexedDB)。JSON書き出しはリポジトリに含めない
 *.json
 !manifest.webmanifest
+
+# サーバーの秘密情報・実データは絶対にコミットしない
+server/config.php
+server/uploads/*
+server/data/
+!server/uploads/.htaccess
