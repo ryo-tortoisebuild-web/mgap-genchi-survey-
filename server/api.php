@@ -202,6 +202,52 @@ switch ($action) {
     break;
   }
 
+  case 'diag': { // 診断用：実際にどのDB・どのファイルで動いているかを特定する（setup_key必須）
+    $setupKey = isset($cfg['setup_key']) ? (string) $cfg['setup_key'] : '';
+    $provided = isset($_GET['key']) ? (string) $_GET['key'] : '';
+    if ($setupKey === '' || !hash_equals($setupKey, $provided)) {
+      fail('診断は無効です（config.php の setup_key を設定し、?key= に同じ値を付けてください）', 403);
+    }
+    $d = $cfg['db'];
+    $out = array(
+      'ok' => true,
+      'running_file'  => __FILE__,                       // 実行中の api.php の実パス（どのコピーかを判別）
+      'config_mtime'  => date('Y-m-d H:i:s', @filemtime(__DIR__ . '/config.php')), // 読み込んだconfigの更新時刻
+      'config_driver' => $d['driver'],
+      'config_db_name'     => isset($d['name']) ? $d['name'] : null,
+      'config_db_name_hex' => isset($d['name']) ? bin2hex($d['name']) : null,   // 全角・不可視文字の検出用
+      'config_db_host'     => isset($d['host']) ? $d['host'] : null,
+    );
+    if ($d['driver'] === 'sqlite') {
+      $out['sqlite_path']   = $d['sqlite_path'];
+      $out['sqlite_exists'] = file_exists($d['sqlite_path']);
+      try {
+        $tables = array();
+        foreach ($pdo->query("SELECT name FROM sqlite_master WHERE type='table'") as $r) { $tables[] = $r['name']; }
+        $out['tables'] = $tables;
+      } catch (Exception $e) { $out['tables'] = 'エラー: ' . $e->getMessage(); }
+    } else {
+      try { $out['connected_database'] = $pdo->query('SELECT DATABASE()')->fetchColumn(); } catch (Exception $e) { $out['connected_database'] = 'エラー'; }
+      try { $out['connected_database_hex'] = bin2hex($out['connected_database']); } catch (Exception $e) {}
+      try { $out['mysql_version'] = $pdo->query('SELECT VERSION()')->fetchColumn(); } catch (Exception $e) {}
+      try {
+        $tables = array();
+        foreach ($pdo->query('SHOW TABLES') as $r) { $vals = array_values($r); $tables[] = $vals[0]; }
+        $out['tables'] = $tables;
+      } catch (Exception $e) { $out['tables'] = 'エラー: ' . $e->getMessage(); }
+    }
+    // users の中身（パスワードハッシュは返さない）
+    try {
+      $rows = $pdo->query('SELECT id, username, created_at FROM users')->fetchAll();
+      foreach ($rows as $i => $r) {
+        $rows[$i]['created_at_readable'] = date('Y-m-d H:i:s', (int) ($r['created_at'] / 1000)) . '（サーバー時刻）';
+      }
+      $out['users'] = $rows;
+    } catch (Exception $e) { $out['users'] = 'users表なし'; }
+    json_out($out);
+    break;
+  }
+
   default:
     fail('不明なアクションです: ' . $action, 404);
 }

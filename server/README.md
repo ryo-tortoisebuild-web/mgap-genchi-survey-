@@ -101,6 +101,16 @@ apiBase: 'https://（あなたのドメイン）/genchi-api/api.php',
 
 ---
 
+## 困ったとき：接続先の診断（diag）
+「設定したはずのDBと違う場所を見ている気がする」ときは、`config.php` に `setup_key` を設定したうえで
+
+```
+https://（ドメイン）/genchi-api/api.php?action=diag&key=（setup_keyの値）
+```
+
+を開くと、**実行中の api.php のファイルパス／読み込んだ config の driver・DB名（16進表記つき）／実際に接続しているDB名／テーブル一覧／users の中身（ハッシュ除く）** が返ります。
+`running_file` が想定と違うパスなら、別のコピーが動いています。`setup_key` が空なら diag は無効（第三者は使えません）。
+
 ## バックアップ
 アプリの「⬇ JSON書き出し」は従来どおり使えます（1物件＝1ファイル）。
 サーバーが不調でも、各端末のローカル（IndexedDB）にデータは残り、復旧後に自動で同期されます。
