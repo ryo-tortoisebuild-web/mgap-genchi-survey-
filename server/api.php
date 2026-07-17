@@ -39,10 +39,17 @@ switch ($action) {
     json_out(array('ok' => true, 'hasUser' => user_count($pdo) > 0, 'server' => 'genchi-api'));
     break;
 
-  case 'register': { // 最初の1ユーザーのみ作成可（以降は無効）
+  case 'register': { // 最初の1ユーザーのみ作成可（初期設定キー必須・以降は無効）
     if ($method !== 'POST') fail('POSTで送信してください', 405);
-    if (user_count($pdo) > 0) fail('登録は既に完了しています（管理者は1人のみ）', 403);
+    // 1) サーバーのconfig.phpに setup_key が設定されていなければ登録は完全に無効
+    $setupKey = isset($cfg['setup_key']) ? (string) $cfg['setup_key'] : '';
+    if ($setupKey === '') fail('新規登録は無効です（サーバー側で初期設定キーが未設定）', 403);
     $b = read_json_body();
+    // 2) 初期設定キーが一致しなければ拒否（定数時間比較。ユーザー有無より先に判定し情報を漏らさない）
+    $provided = isset($b['setupKey']) ? (string) $b['setupKey'] : '';
+    if (!hash_equals($setupKey, $provided)) fail('初期設定キーが違います', 403);
+    // 3) 既に管理者がいれば登録不可
+    if (user_count($pdo) > 0) fail('登録は既に完了しています（管理者は1人のみ）', 403);
     $u = trim(isset($b['username']) ? $b['username'] : '');
     $p = isset($b['password']) ? $b['password'] : '';
     if ($u === '' || strlen($p) < 6) fail('IDと6文字以上のパスワードを入力してください');

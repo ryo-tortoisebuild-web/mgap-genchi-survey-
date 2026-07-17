@@ -42,6 +42,10 @@ window.App = window.App || {};
         '<label class="login-field"><span>ID</span><input type="text" id="login-user" autocomplete="username" autocapitalize="none"></label>' +
         '<label class="login-field"><span>パスワード' + (mode === 'register' ? '（6文字以上）' : '') + '</span>' +
           '<input type="password" id="login-pass" autocomplete="' + (mode === 'register' ? 'new-password' : 'current-password') + '"></label>' +
+        (mode === 'register'
+          ? '<label class="login-field"><span>初期設定キー（サーバーのconfig.phpに設定した値）</span>' +
+              '<input type="password" id="login-setupkey" autocomplete="off"></label>'
+          : '') +
         '<p class="login-error" id="login-error" hidden></p>' +
         '<button type="button" class="btn btn-primary btn-block" id="login-submit">' +
           (mode === 'register' ? 'アカウントを作成して開始' : 'ログイン') + '</button>' +
@@ -64,7 +68,8 @@ window.App = window.App || {};
     if (!u || !p) { setError('IDとパスワードを入力してください'); return; }
     setError('');
     el('login-submit').disabled = true;
-    var req = mode === 'register' ? App.api.register(u, p) : App.api.login(u, p);
+    var setupKey = el('login-setupkey') ? (el('login-setupkey').value || '') : '';
+    var req = mode === 'register' ? App.api.register(u, p, setupKey) : App.api.login(u, p);
     req.then(function (r) {
       el('login-submit').disabled = false;
       if (r && r.ok && r.token) {

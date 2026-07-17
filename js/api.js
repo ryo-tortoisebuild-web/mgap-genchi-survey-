@@ -63,7 +63,7 @@ window.App = window.App || {};
 
     // --- 各エンドポイント ---
     status:      function () { return App.api.call('status'); },
-    register:    function (u, p) { return App.api.call('register', { method: 'POST', body: { username: u, password: p } }); },
+    register:    function (u, p, setupKey) { return App.api.call('register', { method: 'POST', body: { username: u, password: p, setupKey: setupKey || '' } }); },
     login:       function (u, p) { return App.api.call('login', { method: 'POST', body: { username: u, password: p } }); },
     logout:      function () { return App.api.call('logout', { method: 'POST' }); },
     me:          function () { return App.api.call('me'); },
