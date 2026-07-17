@@ -1,7 +1,9 @@
 /* サーバー同期エンジン（ローカル優先＋自動同期）。
    ・保存：変更のたびに現在の物件をサーバーへ送る（写真はファイルとしてアップロードしURL化、Base64はサーバーに送らない）
    ・取得：一定間隔でサーバーの更新を確認し、新しければ取り込む（最終書き込み優先）
-   ・オフライン時はローカル(IndexedDB)に保存され、接続回復後に自動で送られる */
+   ・毎サイクル、サーバーに無いローカル物件を自動アップロード（初回移行の失敗も自己修復）
+   ・オフライン時はローカル(IndexedDB)に保存され、接続回復後に自動で送られる
+   ・同期の成否は正直に通知する（成功と失敗で表示を分ける） */
 window.App = window.App || {};
 
 (function () {
@@ -11,9 +13,8 @@ window.App = window.App || {};
   var pollTimer = null;
   var meta = {};          // 物件UID → 最後に取り込んだサーバー時刻(ms)
   var lastPushed = {};    // 物件UID → 最後に送信した時点の updatedAt(ローカルISO)
-  var lastError = 0;
-
-  function log() { /* console.debug.apply(console, arguments); */ }
+  var wasFailing = false; // 直前サイクルが失敗していたか（通知のスパム防止）
+  var lastResult = { ok: true, error: null };
 
   /* dataURL(JPEG) → Blob */
   function dataUrlToBlob(dataUrl) {
@@ -59,23 +60,28 @@ window.App = window.App || {};
            (!doc.drawings || doc.drawings.length === 0);
   }
 
-  /* 1物件をサーバーへ保存。成功でtrue、未完了(オフライン等)でfalse */
+  function apiErr(r, what) {
+    if (r && r.offline) return what + '：サーバーに接続できません';
+    return what + '：' + ((r && r.error) || '不明なエラー');
+  }
+
+  /* 1物件をサーバーへ保存。resolve({ok, error}) */
   function pushDoc(doc) {
-    if (isEmptyDoc(doc)) return Promise.resolve(true);
+    if (isEmptyDoc(doc)) return Promise.resolve({ ok: true });
     var jobs = pendingUploads(doc);
-    var chain = Promise.resolve(true);
+    var chain = Promise.resolve(null);   // null=エラーなし／文字列=エラー内容
     jobs.forEach(function (job) {
-      chain = chain.then(function (okSoFar) {
-        if (!okSoFar) return false;
+      chain = chain.then(function (err) {
+        if (err) return err;             // 1枚でも失敗したら以降は送らない（次回リトライ）
         return App.api.uploadPhoto(doc.project.id, job.uid, dataUrlToBlob(job.dataUrl))
           .then(function (r) {
-            if (r && r.ok && r.url) { job.ref.url = r.url; return true; }
-            return false;   // 1枚でも失敗したら中断（次回リトライ）
+            if (r && r.ok && r.url) { job.ref.url = r.url; return null; }
+            return apiErr(r, '写真の送信に失敗');
           });
       });
     });
-    return chain.then(function (uploadsOk) {
-      if (!uploadsOk) return false;
+    return chain.then(function (err) {
+      if (err) return { ok: false, error: err };
       // アップロードで付与したURLをローカルに保存（updatedAtは変えない＝再送ループ防止）
       return App.store.persistQuiet(doc).then(function () {
         var payload = {
@@ -89,9 +95,9 @@ window.App = window.App || {};
           if (r && r.ok) {
             meta[doc.project.id] = r.updatedAt;
             lastPushed[doc.project.id] = doc.project.updatedAt;
-            return App.store.setSyncMeta(meta).then(function () { return true; });
+            return App.store.setSyncMeta(meta).then(function () { return { ok: true }; });
           }
-          return false;
+          return { ok: false, error: apiErr(r, '「' + (doc.project.name || '物件') + '」の保存に失敗') };
         });
       });
     });
@@ -100,28 +106,18 @@ window.App = window.App || {};
   /* 現在の物件が未送信なら送る */
   function pushCurrentIfDirty() {
     var s = App.state;
-    if (!s) return Promise.resolve();
-    if (lastPushed[s.project.id] === s.project.updatedAt) return Promise.resolve();
+    if (!s || isEmptyDoc(s)) return Promise.resolve({ ok: true });
+    if (lastPushed[s.project.id] === s.project.updatedAt) return Promise.resolve({ ok: true });
     return pushDoc(s);
   }
 
-  /* サーバー未登録のローカル物件を全部送る（初回ログイン時の移行） */
-  function pushLocalNotOnServer(serverUids) {
-    return App.store.getAllDocs().then(function (docs) {
-      var chain = Promise.resolve();
-      docs.forEach(function (doc) {
-        if (serverUids.indexOf(doc.project.id) === -1) {
-          chain = chain.then(function () { return pushDoc(doc); });
-        }
-      });
-      return chain;
-    });
-  }
-
-  /* サーバーの一覧を確認し、新しい物件を取り込む／削除を反映する */
+  /* サーバーの一覧を確認し、新しい物件を取り込む／削除を反映する。
+     resolve({ok, error, serverUids}) */
   function pullChanges() {
     return App.api.listProjects().then(function (r) {
-      if (!r || !r.ok || !r.projects) return { list: [] };
+      if (!r || !r.ok || !r.projects) {
+        return { ok: false, error: apiErr(r, '一覧の取得に失敗'), serverUids: null };
+      }
       var chain = Promise.resolve();
       r.projects.forEach(function (row) {
         var uid = row.projectUid;
@@ -147,28 +143,78 @@ window.App = window.App || {};
           });
         }
       });
-      return chain.then(function () { return { list: r.projects }; });
+      return chain.then(function () {
+        return { ok: true, serverUids: r.projects.map(function (p) { return p.projectUid; }) };
+      });
     });
   }
 
-  /* 1サイクル：送る→取り込む */
-  function syncOnce() {
-    if (busy) return Promise.resolve();
+  /* サーバーに無いローカル物件を送る（初回移行＋失敗時の自己修復。毎サイクル実行） */
+  function pushMissing(serverUids) {
+    return App.store.getAllDocs().then(function (docs) {
+      var chain = Promise.resolve({ ok: true });
+      docs.forEach(function (doc) {
+        if (serverUids.indexOf(doc.project.id) === -1 && !isEmptyDoc(doc)) {
+          chain = chain.then(function (res) { return res.ok ? pushDoc(doc) : res; });
+        }
+      });
+      return chain;
+    });
+  }
+
+  /* 同期結果の通知。手動時は毎回、自動時は「失敗し始めた／回復した」の変わり目だけ表示 */
+  function notifyStatus(result, manual) {
+    if (manual) {
+      if (result.ok) App.ui.toast('✅ 同期しました（サーバー保存済み）', 2500);
+      else App.ui.toast('⚠ 同期に失敗しました。' + result.error + '（データは端末内に保存されています）', 7000);
+      wasFailing = !result.ok;
+      return;
+    }
+    if (!result.ok && !wasFailing) {
+      wasFailing = true;
+      App.ui.toast('⚠ サーバー同期に失敗しています。' + result.error + '（データは端末内に保存されています）', 7000);
+    } else if (result.ok && wasFailing) {
+      wasFailing = false;
+      App.ui.toast('✅ サーバー同期が回復しました', 3000);
+    }
+  }
+
+  /* 1サイクル：送る→取り込む→未送信を補う。resolve({ok, error}) */
+  function syncOnce(manual) {
+    if (busy) return Promise.resolve(lastResult);
     busy = true;
+    var result = { ok: true, error: null };
     return pushCurrentIfDirty()
-      .then(function () { return pullChanges(); })
-      .then(function () { lastError = 0; })
-      .catch(function () { lastError++; })
-      .then(function () { busy = false; });
+      .then(function (r) {
+        if (!r.ok) result = r;
+        return pullChanges();
+      })
+      .then(function (pr) {
+        if (!pr.ok) { if (result.ok) result = { ok: false, error: pr.error }; return null; }
+        return pushMissing(pr.serverUids);
+      })
+      .then(function (mr) {
+        if (mr && !mr.ok && result.ok) result = mr;
+      })
+      .catch(function (e) {
+        result = { ok: false, error: '同期処理でエラー（' + (e && e.message ? e.message : e) + '）' };
+      })
+      .then(function () {
+        busy = false;
+        lastResult = result;
+        notifyStatus(result, manual);
+        return result;
+      });
   }
 
   function schedulePush() {
     clearTimeout(pushTimer);
-    pushTimer = setTimeout(function () { pushTimer = null; syncOnce(); }, 1200);
+    pushTimer = setTimeout(function () { pushTimer = null; syncOnce(false); }, 1200);
   }
 
   App.sync = {
     isRunning: function () { return running; },
+    lastResult: function () { return lastResult; },
 
     /* ログイン成功後に開始 */
     start: function () {
@@ -176,22 +222,16 @@ window.App = window.App || {};
       running = true;
       return App.store.getSyncMeta().then(function (m) {
         meta = m || {};
-        // 初回：サーバー未登録のローカル物件を移行アップロード → 取り込み
-        return App.api.listProjects().then(function (r) {
-          var uids = (r && r.ok && r.projects) ? r.projects.map(function (p) { return p.projectUid; }) : [];
-          return pushLocalNotOnServer(uids);
-        }).then(function () {
-          return syncOnce();
-        }).then(function () {
-          clearInterval(pollTimer);
-          pollTimer = setInterval(function () {
-            if (navigator.onLine !== false) syncOnce();
-          }, (App.config.pollIntervalMs || 8000));
-          // 変更のたびに送信（デバウンス）
-          App.events.on('change', function () { if (running) schedulePush(); });
-          // オンライン復帰で即同期
-          window.addEventListener('online', function () { if (running) syncOnce(); });
-        });
+        return syncOnce(false);
+      }).then(function () {
+        clearInterval(pollTimer);
+        pollTimer = setInterval(function () {
+          if (navigator.onLine !== false) syncOnce(false);
+        }, (App.config.pollIntervalMs || 8000));
+        // 変更のたびに送信（デバウンス）
+        App.events.on('change', function () { if (running) schedulePush(); });
+        // オンライン復帰で即同期
+        window.addEventListener('online', function () { if (running) syncOnce(false); });
       });
     },
 
@@ -201,7 +241,7 @@ window.App = window.App || {};
       clearTimeout(pushTimer);
     },
 
-    /* 明示的に今すぐ同期（「サーバーに取り込む」ボタン等） */
-    now: function () { return syncOnce(); },
+    /* 明示的に今すぐ同期（「今すぐ同期」ボタン）。結果は必ずトーストで通知される */
+    now: function () { return syncOnce(true); },
   };
 })();

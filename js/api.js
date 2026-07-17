@@ -28,7 +28,10 @@ window.App = window.App || {};
       }
       var headers = {};
       var token = App.api.getToken();
-      if (token) headers['Authorization'] = 'Bearer ' + token;
+      if (token) {
+        headers['Authorization'] = 'Bearer ' + token;
+        headers['X-Auth-Token'] = token;   // FastCGI環境でAuthorizationが剥がされる場合の代替
+      }
       var init = { method: opts.method || 'GET', headers: headers };
       if (opts.body !== undefined) {
         headers['Content-Type'] = 'application/json';
@@ -55,7 +58,10 @@ window.App = window.App || {};
       fd.append('file', blob, photoUid + '.jpg');
       var headers = {};
       var token = App.api.getToken();
-      if (token) headers['Authorization'] = 'Bearer ' + token;
+      if (token) {
+        headers['Authorization'] = 'Bearer ' + token;
+        headers['X-Auth-Token'] = token;
+      }
       return fetch(url, { method: 'POST', headers: headers, body: fd })
         .then(function (res) { return res.json(); })
         .catch(function () { return { ok: false, offline: true }; });

@@ -17,8 +17,8 @@ window.App = window.App || {};
       '<button type="button" class="btn btn-small" id="btn-sync-now">🔄 今すぐ同期</button>' +
       '<button type="button" class="btn btn-small" id="btn-logout">ログアウト</button>';
     el('btn-sync-now').addEventListener('click', function () {
-      App.ui.toast('同期しています…', 1500);
-      App.sync.now().then(function () { App.ui.toast('同期しました', 1500); });
+      App.ui.toast('同期しています…', 1200);
+      App.sync.now();   // 成否はsync側が実結果に基づきトースト表示する
     });
     el('btn-logout').addEventListener('click', doLogout);
   }

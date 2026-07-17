@@ -7,7 +7,7 @@ function send_cors($cfg) {
     header('Access-Control-Allow-Origin: ' . $origin);
     header('Vary: Origin');
     header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-    header('Access-Control-Allow-Headers: Authorization, Content-Type');
+    header('Access-Control-Allow-Headers: Authorization, X-Auth-Token, Content-Type');
     header('Access-Control-Max-Age: 86400');
   }
   if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -35,11 +35,17 @@ function read_json_body() {
 function bearer_token() {
   $h = '';
   if (isset($_SERVER['HTTP_AUTHORIZATION'])) $h = $_SERVER['HTTP_AUTHORIZATION'];
+  elseif (isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) $h = $_SERVER['REDIRECT_HTTP_AUTHORIZATION']; // SetEnvIf+rewrite経由
   elseif (function_exists('apache_request_headers')) {
     $hs = apache_request_headers();
     foreach ($hs as $k => $v) { if (strtolower($k) === 'authorization') $h = $v; }
   }
   if (stripos($h, 'Bearer ') === 0) return trim(substr($h, 7));
+  /* Xserver等のFastCGI環境ではAuthorizationヘッダが剥がされることがあるため、
+     カスタムヘッダ X-Auth-Token を代替経路として受け付ける（フロントは両方送る） */
+  if (isset($_SERVER['HTTP_X_AUTH_TOKEN']) && $_SERVER['HTTP_X_AUTH_TOKEN'] !== '') {
+    return trim($_SERVER['HTTP_X_AUTH_TOKEN']);
+  }
   return '';
 }
 

@@ -4,6 +4,12 @@ RewriteCond %{HTTPS} !=on
 RewriteCond %{HTTP:X-Forwarded-Proto} !https
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
+# --- AuthorizationヘッダをPHP(FastCGI)へ渡す（Xserver等で剥がされる対策） ---
+CGIPassAuth On
+<IfModule mod_setenvif.c>
+  SetEnvIf Authorization "(.+)" HTTP_AUTHORIZATION=$1
+</IfModule>
+
 # --- セキュリティヘッダ ---
 <IfModule mod_headers.c>
   Header always set Strict-Transport-Security "max-age=31536000"
