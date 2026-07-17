@@ -10,7 +10,9 @@ Thumbs.db
 !manifest.webmanifest
 
 # サーバーの秘密情報・実データは絶対にコミットしない
-server/config.php
+# （config.sample.php 以外の config*.php は名前違い・バックアップ含め全て除外）
+server/config*.php
+!server/config.sample.php
 server/uploads/*
 server/data/
 !server/uploads/.htaccess
