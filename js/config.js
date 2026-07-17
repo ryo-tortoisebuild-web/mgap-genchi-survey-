@@ -5,6 +5,6 @@
    ※このURLは公開情報（ブラウザから呼ぶ）。パスワード等の秘密情報はここに書かない。 */
 window.App = window.App || {};
 App.config = {
-  apiBase: '',
+  apiBase: 'https://tortoisebuild.com/genchi-api/api.php',
   pollIntervalMs: 8000,   // 他端末の変更を取りに行く間隔（ミリ秒）
 };
