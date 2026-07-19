@@ -90,14 +90,93 @@ switch ($action) {
 
   case 'me': {
     $user = require_auth($pdo);
-    json_out(array('ok' => true, 'username' => $user['username']));
+    json_out(array('ok' => true, 'username' => $user['username'],
+      'isAdmin' => ((int) (isset($user['is_admin']) ? $user['is_admin'] : 0) === 1)));
+    break;
+  }
+
+  /* ===== メンバー管理（管理者のみ）=====
+     setup_keyとは別経路の恒久的なユーザー追加口。追加されたユーザーは
+     物件については全員フル権限（方式A）だが、メンバー管理は管理者のみ。 */
+
+  case 'members': { // 一覧
+    require_admin($pdo);
+    $rows = $pdo->query('SELECT id, username, is_admin, created_at FROM users ORDER BY id ASC')->fetchAll();
+    $list = array();
+    foreach ($rows as $r) {
+      $list[] = array(
+        'id' => (int) $r['id'],
+        'username' => $r['username'],
+        'isAdmin' => ((int) $r['is_admin'] === 1),
+        'createdAt' => (int) $r['created_at'],
+      );
+    }
+    json_out(array('ok' => true, 'members' => $list));
+    break;
+  }
+
+  case 'member_add': { // 追加
+    $admin = require_admin($pdo);
+    if ($method !== 'POST') fail('POSTで送信してください', 405);
+    $b = read_json_body();
+    $u = trim(isset($b['username']) ? $b['username'] : '');
+    $p = isset($b['password']) ? $b['password'] : '';
+    $mkAdmin = !empty($b['isAdmin']);
+    if ($u === '') fail('IDを入力してください');
+    if (strlen($p) < 6) fail('パスワードは6文字以上にしてください');
+    $ex = $pdo->prepare('SELECT id FROM users WHERE username = ? LIMIT 1');
+    $ex->execute(array($u));
+    if ($ex->fetch()) fail('そのIDは既に使われています');
+    $st = $pdo->prepare('INSERT INTO users (username, password_hash, created_at, is_admin) VALUES (?,?,?,?)');
+    $st->execute(array($u, password_hash($p, PASSWORD_DEFAULT), now_ms(), $mkAdmin ? 1 : 0));
+    json_out(array('ok' => true, 'id' => (int) $pdo->lastInsertId(), 'username' => $u, 'isAdmin' => $mkAdmin));
+    break;
+  }
+
+  case 'member_password': { // パスワード再発行
+    require_admin($pdo);
+    if ($method !== 'POST') fail('POSTで送信してください', 405);
+    $b = read_json_body();
+    $id = (int) (isset($b['id']) ? $b['id'] : 0);
+    $p = isset($b['password']) ? $b['password'] : '';
+    if (strlen($p) < 6) fail('パスワードは6文字以上にしてください');
+    $ex = $pdo->prepare('SELECT id FROM users WHERE id = ? LIMIT 1');
+    $ex->execute(array($id));
+    if (!$ex->fetch()) fail('対象のユーザーが見つかりません', 404);
+    $pdo->prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+        ->execute(array(password_hash($p, PASSWORD_DEFAULT), $id));
+    // パスワード変更したら、その人の既存ログインは無効化（安全側）
+    $pdo->prepare('DELETE FROM auth_tokens WHERE user_id = ?')->execute(array($id));
+    json_out(array('ok' => true));
+    break;
+  }
+
+  case 'member_delete': { // 削除
+    $admin = require_admin($pdo);
+    if ($method !== 'POST') fail('POSTで送信してください', 405);
+    $b = read_json_body();
+    $id = (int) (isset($b['id']) ? $b['id'] : 0);
+    if ($id === (int) $admin['id']) fail('自分自身は削除できません');
+    $ex = $pdo->prepare('SELECT id, is_admin FROM users WHERE id = ? LIMIT 1');
+    $ex->execute(array($id));
+    $target = $ex->fetch();
+    if (!$target) fail('対象のユーザーが見つかりません', 404);
+    if ((int) $target['is_admin'] === 1) {
+      $c = (int) $pdo->query('SELECT COUNT(*) c FROM users WHERE is_admin = 1')->fetch()['c'];
+      if ($c <= 1) fail('管理者が0人になるため削除できません');
+    }
+    $pdo->prepare('DELETE FROM auth_tokens WHERE user_id = ?')->execute(array($id));
+    $pdo->prepare('DELETE FROM users WHERE id = ?')->execute(array($id));
+    // 物件は共有資産のため削除しない（作成者の記録が残るだけ）
+    json_out(array('ok' => true));
     break;
   }
 
   case 'projects': { // 一覧（メタのみ。ポーリング用に updatedAt を返す）
-    $user = require_auth($pdo);
-    $st = $pdo->prepare('SELECT project_uid, name, address, survey_date, updated_at, deleted FROM projects WHERE user_id = ? ORDER BY updated_at DESC');
-    $st->execute(array($user['id']));
+    // 方式A：物件は全ユーザー共有。ログインしていれば全件を閲覧・編集できる
+    require_auth($pdo);
+    $st = $pdo->prepare('SELECT project_uid, name, address, survey_date, updated_at, deleted FROM projects ORDER BY updated_at DESC');
+    $st->execute();
     $rows = $st->fetchAll();
     $list = array();
     foreach ($rows as $r) {
@@ -110,11 +189,11 @@ switch ($action) {
     break;
   }
 
-  case 'project': { // 1物件の全ドキュメント取得
-    $user = require_auth($pdo);
+  case 'project': { // 1物件の全ドキュメント取得（全ユーザー共有）
+    require_auth($pdo);
     $uid = isset($_GET['uid']) ? $_GET['uid'] : '';
-    $st = $pdo->prepare('SELECT p.*, d.doc FROM projects p LEFT JOIN project_docs d ON d.project_id = p.id WHERE p.user_id = ? AND p.project_uid = ? LIMIT 1');
-    $st->execute(array($user['id'], $uid));
+    $st = $pdo->prepare('SELECT p.*, d.doc FROM projects p LEFT JOIN project_docs d ON d.project_id = p.id WHERE p.project_uid = ? LIMIT 1');
+    $st->execute(array($uid));
     $r = $st->fetch();
     if (!$r) fail('物件が見つかりません', 404);
     json_out(array('ok' => true, 'projectUid' => $r['project_uid'], 'updatedAt' => (int)$r['updated_at'],
@@ -134,8 +213,9 @@ switch ($action) {
     $surveyDate = isset($b['surveyDate']) ? $b['surveyDate'] : '';
     $ts = now_ms();
 
-    $st = $pdo->prepare('SELECT id FROM projects WHERE user_id = ? AND project_uid = ? LIMIT 1');
-    $st->execute(array($user['id'], $uid));
+    // 方式A：誰が作った物件でも、ログインユーザーは編集できる（user_idは作成者の記録として残す）
+    $st = $pdo->prepare('SELECT id FROM projects WHERE project_uid = ? LIMIT 1');
+    $st->execute(array($uid));
     $existing = $st->fetch();
     if ($existing) {
       $pid = (int)$existing['id'];
@@ -165,8 +245,8 @@ switch ($action) {
     $b = read_json_body();
     $uid = trim(isset($b['projectUid']) ? $b['projectUid'] : '');
     $ts = now_ms();
-    $up = $pdo->prepare('UPDATE projects SET deleted=1, updated_at=? WHERE user_id=? AND project_uid=?');
-    $up->execute(array($ts, $user['id'], $uid));
+    $up = $pdo->prepare('UPDATE projects SET deleted=1, updated_at=? WHERE project_uid=?');
+    $up->execute(array($ts, $uid));
     json_out(array('ok' => true, 'updatedAt' => $ts));
     break;
   }
@@ -192,8 +272,8 @@ switch ($action) {
     $url = rtrim($cfg['upload_base_url'], '/') . '/' . $user['id'] . '/' . $projectUid . '/' . $filename;
 
     // photos メタ upsert
-    $ex = $pdo->prepare('SELECT id FROM photos WHERE user_id=? AND project_uid=? AND photo_uid=? LIMIT 1');
-    $ex->execute(array($user['id'], $projectUid, $photoUid));
+    $ex = $pdo->prepare('SELECT id FROM photos WHERE project_uid=? AND photo_uid=? LIMIT 1');
+    $ex->execute(array($projectUid, $photoUid));
     if (!$ex->fetch()) {
       $pdo->prepare('INSERT INTO photos (user_id, project_uid, photo_uid, filename, url, created_at) VALUES (?,?,?,?,?,?)')
           ->execute(array($user['id'], $projectUid, $photoUid, $filename, $url, now_ms()));

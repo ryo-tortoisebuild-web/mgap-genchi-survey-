@@ -586,3 +586,31 @@ body.modal-open { position: fixed; left: 0; right: 0; width: 100%; overflow: hid
 }
 .login-error { color: #c62828; font-size: 13px; margin: 0 0 12px; }
 .btn-block { width: 100%; padding: 12px; font-size: 16px; }
+
+/* ---- メンバー管理 ---- */
+.acct-admin {
+  background: #1565c0; color: #fff; font-size: 11px;
+  border-radius: 4px; padding: 1px 5px; margin-left: 6px;
+}
+.member-note { margin: 0 0 14px; font-size: 13px; }
+.member-list { margin-bottom: 18px; }
+.member-row {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between;
+  border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
+}
+.member-info { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.member-name { font-weight: bold; }
+.member-badge {
+  background: #1565c0; color: #fff; font-size: 11px; border-radius: 4px; padding: 1px 6px;
+}
+.member-badge-me { background: #78909c; }
+.member-date { color: #90a4ae; font-size: 12px; }
+.member-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.member-add {
+  border-top: 1px solid #e0e0e0; padding-top: 16px;
+}
+.member-add h3 { margin: 0 0 12px; font-size: 15px; }
+.member-hint { font-size: 12px; margin-top: 8px; }
+.member-msg { border-radius: 8px; padding: 9px 12px; font-size: 13px; margin: 12px 0 0; }
+.member-msg.is-ok { background: #e8f5e9; color: #2e7d32; }
+.member-msg.is-error { background: #ffebee; color: #c62828; }

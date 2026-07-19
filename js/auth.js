@@ -6,16 +6,23 @@ window.App = window.App || {};
 
 (function () {
   var overlay, accountArea, mode = 'login', hasUser = true;
+  var currentUser = '', currentIsAdmin = false;
 
   function el(id) { return document.getElementById(id); }
 
-  function renderAccount(username) {
+  function renderAccount(username, isAdmin) {
     if (!accountArea) return;
+    currentUser = username;
+    currentIsAdmin = !!isAdmin;
     accountArea.hidden = false;
     accountArea.innerHTML =
-      '<span class="acct-name">👤 ' + escapeHtml(username) + '</span>' +
+      '<span class="acct-name">👤 ' + escapeHtml(username) + (isAdmin ? '<span class="acct-admin">管理者</span>' : '') + '</span>' +
+      (isAdmin ? '<button type="button" class="btn btn-small" id="btn-members">👥 メンバー</button>' : '') +
       '<button type="button" class="btn btn-small" id="btn-sync-now">🔄 今すぐ同期</button>' +
       '<button type="button" class="btn btn-small" id="btn-logout">ログアウト</button>';
+    if (isAdmin && el('btn-members')) {
+      el('btn-members').addEventListener('click', function () { App.members.open(); });
+    }
     el('btn-sync-now').addEventListener('click', function () {
       App.ui.toast('同期しています…', 1200);
       App.sync.now();   // 成否はsync側が実結果に基づきトースト表示する
@@ -84,8 +91,16 @@ window.App = window.App || {};
     });
   }
 
-  function onLoggedIn(username) {
-    renderAccount(username);
+  /* isAdmin未確定のときは me で確認してから表示（管理者ボタンの出し分けのため） */
+  function onLoggedIn(username, isAdmin) {
+    if (isAdmin === undefined) {
+      renderAccount(username, false);
+      App.api.me().then(function (me) {
+        if (me && me.ok) renderAccount(me.username, me.isAdmin);
+      });
+    } else {
+      renderAccount(username, isAdmin);
+    }
     App.sync.start();
   }
 
@@ -97,6 +112,9 @@ window.App = window.App || {};
   }
 
   App.auth = {
+    username: function () { return currentUser; },
+    isAdmin: function () { return currentIsAdmin; },
+
     /* 起動時に呼ぶ。ローカルのみモードなら即resolve */
     init: function () {
       overlay = el('login-overlay');
@@ -110,13 +128,13 @@ window.App = window.App || {};
         var token = App.api.getToken();
         if (st && st.offline && token) {
           // オフラインでもトークンがあれば利用継続（同期は回復後）
-          renderAccount('（オフライン）');
+          renderAccount('（オフライン）', false);
           App.sync.start();
           return;
         }
         if (token) {
           return App.api.me().then(function (me) {
-            if (me && me.ok) { onLoggedIn(me.username); }
+            if (me && me.ok) { onLoggedIn(me.username, me.isAdmin); }
             else { App.api.setToken(''); showOverlay(); }
           });
         }

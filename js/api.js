@@ -77,5 +77,11 @@ window.App = window.App || {};
     getProject:  function (uid) { return App.api.call('project', { query: { uid: uid } }); },
     saveProject: function (payload) { return App.api.call('project_save', { method: 'POST', body: payload }); },
     deleteProject: function (uid) { return App.api.call('project_delete', { method: 'POST', body: { projectUid: uid } }); },
+
+    // --- メンバー管理（管理者のみ） ---
+    listMembers:  function () { return App.api.call('members'); },
+    addMember:    function (u, p, isAdmin) { return App.api.call('member_add', { method: 'POST', body: { username: u, password: p, isAdmin: !!isAdmin } }); },
+    resetMemberPassword: function (id, p) { return App.api.call('member_password', { method: 'POST', body: { id: id, password: p } }); },
+    deleteMember: function (id) { return App.api.call('member_delete', { method: 'POST', body: { id: id } }); },
   };
 })();

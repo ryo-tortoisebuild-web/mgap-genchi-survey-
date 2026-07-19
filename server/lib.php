@@ -67,4 +67,13 @@ function require_auth($pdo) {
   return $user;
 }
 
+/* 管理者のみ許可する操作用。管理者でなければ403で停止 */
+function require_admin($pdo) {
+  $user = require_auth($pdo);
+  if ((int) (isset($user['is_admin']) ? $user['is_admin'] : 0) !== 1) {
+    fail('この操作は管理者のみ実行できます', 403);
+  }
+  return $user;
+}
+
 function random_token() { return bin2hex(random_bytes(32)); }

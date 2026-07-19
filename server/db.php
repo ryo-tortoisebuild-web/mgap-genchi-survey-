@@ -36,6 +36,21 @@ function db_migrate($pdo, $driver) {
   // usernameの一意制約（MySQLはインデックス長を考慮しVARCHAR(191)相当で運用）
   try { $pdo->exec("CREATE UNIQUE INDEX ux_users_username ON users (username" . ($mysql ? "(191)" : "") . ")"); } catch (Exception $e) {}
 
+  /* 管理者フラグ（後から追加した列。既存DBにも安全に足す）。
+     1=メンバー追加などの管理操作が可能。データ（物件）は全ユーザー共有で全員フル権限。 */
+  try { $pdo->exec("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0"); } catch (Exception $e) { /* 既にある */ }
+  /* 管理者が1人もいなければ、最初のユーザー（＝初回登録した本人）を管理者に昇格 */
+  try {
+    $adminCount = (int) $pdo->query('SELECT COUNT(*) c FROM users WHERE is_admin = 1')->fetch()['c'];
+    if ($adminCount === 0) {
+      $first = $pdo->query('SELECT id FROM users ORDER BY id ASC LIMIT 1')->fetch();
+      if ($first) {
+        $up = $pdo->prepare('UPDATE users SET is_admin = 1 WHERE id = ?');
+        $up->execute(array($first['id']));
+      }
+    }
+  } catch (Exception $e) { /* usersがまだ無い等は無視 */ }
+
   $pdo->exec("CREATE TABLE IF NOT EXISTS auth_tokens (
     id $pk,
     user_id BIGINT NOT NULL,
