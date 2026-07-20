@@ -24,6 +24,10 @@ window.App = window.App || {};
     },
   };
 
+  /* ゴミ箱の保管期間（日）。これを過ぎると自動で完全削除される。
+     サーバー側(config.php の trash_retention_days)と同じ値にすること */
+  App.TRASH_RETENTION_DAYS = 30;
+
   /* ---- 画像の表示元 ----
      ローカルで撮影した写真は dataUrl（Base64・即時表示・オフライン可）を持つ。
      他端末で登録されサーバー経由で来た写真は url（サーバー上のファイル）を持つ。
@@ -126,6 +130,11 @@ window.App = window.App || {};
       if (!Array.isArray(dw.pins)) dw.pins = [];
     });
 
+    /* ゴミ箱：削除した撮影ポイントの退避先。
+       elements配列はindexが番号(①②③)の基準なので、削除分は配列に残さず
+       ここへ移す（保持して隠す＝写真の対象外フラグと同じ考え方・番号はずれない） */
+    if (!Array.isArray(doc.deletedElements)) doc.deletedElements = [];
+
     var usedTrades = {};
     (doc.elements || []).forEach(function (el) {
       (el.trades || []).forEach(function (t) { usedTrades[t] = true; });
@@ -159,8 +168,10 @@ window.App = window.App || {};
     };
   }
 
+  /* 通常の一覧＝ゴミ箱に入っていない物件だけ */
   function sortedIndex() {
     return Object.keys(projectIndex).map(function (k) { return projectIndex[k]; })
+      .filter(function (e) { return !e.deleted; })
       .sort(function (a, b) { return (b.updatedAt || '').localeCompare(a.updatedAt || ''); });
   }
 
@@ -204,6 +215,7 @@ window.App = window.App || {};
     return idbGet(id).then(function (doc) {
       if (!doc || doc.app !== APP_ID) throw new Error('物件データを読み込めませんでした');
       App.state = normalizeDoc(doc);
+      App.store.purgeExpiredElements();   /* 保管期限を過ぎた撮影ポイントを掃除 */
       idbPut(id, LAST_KEY).catch(function () {});
       App.events.emit('change');
     });
@@ -223,9 +235,13 @@ window.App = window.App || {};
             .then(function () { return legacy.project.id; });
         });
       }).then(function (migratedId) {
+        /* 起動時に、保管期限を過ぎたゴミ箱の物件を完全削除 */
+        return App.store.purgeExpiredProjects().then(function () { return migratedId; });
+      }).then(function (migratedId) {
         return idbGet(LAST_KEY).then(function (lastId) {
           var id = null;
-          if (lastId && projectIndex[lastId]) id = lastId;
+          /* ゴミ箱に入っている物件は開かない */
+          if (lastId && projectIndex[lastId] && !projectIndex[lastId].deleted) id = lastId;
           else if (migratedId) id = migratedId;
           else {
             var list = sortedIndex();
@@ -281,17 +297,23 @@ window.App = window.App || {};
       return saveNow().then(function () { return loadProject(id); });
     },
 
+    /* 物件を削除＝ゴミ箱へ（実データは残し、一覧から隠すだけ）。
+       サーバーにも「削除」を伝えて他端末のゴミ箱にも入れる */
     deleteProject: function (id) {
-      delete projectIndex[id];
+      var entry = projectIndex[id];
+      if (entry) {
+        entry.deleted = true;
+        entry.deletedAt = new Date().toISOString();
+      }
       var wasCurrent = App.state && App.state.project.id === id;
       if (wasCurrent) {
         /* カレント削除時はsaveNowしない（消した物件を保存し直さないため） */
         clearTimeout(saveTimer);
         saveTimer = null;
       }
-      return idbDel(id).then(function () {
-        return idbPut(projectIndex, INDEX_KEY);
-      }).then(function () {
+      /* 本体(doc)はIndexedDBに残す＝復元できる */
+      return idbPut(projectIndex, INDEX_KEY).then(function () {
+        if (App.sync && App.sync.isRunning()) App.sync.pushDelete(id);
         if (!wasCurrent) return;
         var list = sortedIndex();
         if (list.length) return loadProject(list[0].id);
@@ -300,6 +322,59 @@ window.App = window.App || {};
         App.events.emit('change');
         return persist(App.state);
       });
+    },
+
+    /* ゴミ箱の物件一覧（残り日数つき） */
+    listTrashedProjects: function () {
+      var days = App.TRASH_RETENTION_DAYS;
+      return Object.keys(projectIndex).map(function (k) { return projectIndex[k]; })
+        .filter(function (e) { return e.deleted; })
+        .map(function (e) {
+          var ms = Date.parse(e.deletedAt || '') || Date.now();
+          var remain = Math.ceil((ms + days * 86400000 - Date.now()) / 86400000);
+          return {
+            id: e.id, name: e.name, deletedAt: e.deletedAt,
+            elementCount: e.elementCount, drawingCount: e.drawingCount,
+            remainingDays: remain < 0 ? 0 : remain,
+          };
+        })
+        .sort(function (a, b) { return (b.deletedAt || '').localeCompare(a.deletedAt || ''); });
+    },
+
+    /* 物件をゴミ箱から復元（サーバー側も戻す） */
+    restoreProject: function (id) {
+      var entry = projectIndex[id];
+      if (!entry) return Promise.resolve(false);
+      delete entry.deleted;
+      delete entry.deletedAt;
+      return idbPut(projectIndex, INDEX_KEY).then(function () {
+        if (App.sync && App.sync.isRunning()) return App.sync.pushRestore(id);
+      }).then(function () {
+        App.events.emit('change');
+        return true;
+      });
+    },
+
+    /* 保管期限を過ぎたローカルの物件を完全削除（サーバー側も期限で消える） */
+    purgeExpiredProjects: function () {
+      var limit = Date.now() - App.TRASH_RETENTION_DAYS * 86400000;
+      var expired = Object.keys(projectIndex).filter(function (k) {
+        var e = projectIndex[k];
+        return e.deleted && (Date.parse(e.deletedAt || '') || Date.now()) < limit;
+      });
+      if (!expired.length) return Promise.resolve(0);
+      return Promise.all(expired.map(function (k) {
+        delete projectIndex[k];
+        return idbDel(k);
+      })).then(function () {
+        return idbPut(projectIndex, INDEX_KEY);
+      }).then(function () { return expired.length; });
+    },
+
+    /* サーバーで完全削除された物件をローカルからも消す（同期時に使用） */
+    dropProjectLocal: function (id) {
+      delete projectIndex[id];
+      return idbDel(id).then(function () { return idbPut(projectIndex, INDEX_KEY); });
     },
 
     /* ---- 要素 ---- */
@@ -334,12 +409,71 @@ window.App = window.App || {};
       return el;
     },
 
+    /* 撮影ポイントを削除＝ゴミ箱へ退避（実データは消さない）。
+       間取り上のピン位置も一緒に保存しておき、復元時に元の場所へ戻す */
     deleteElement: function (id) {
-      App.state.elements = App.state.elements.filter(function (e) { return e.id !== id; });
+      var el = App.store.getElement(id);
+      if (!el) return;
+      var pins = [];
       App.state.drawings.forEach(function (d) {
+        d.pins.forEach(function (p) {
+          if (p.elementId === id) pins.push({ drawingId: d.id, pin: JSON.parse(JSON.stringify(p)) });
+        });
         d.pins = d.pins.filter(function (p) { return p.elementId !== id; });
       });
+      App.state.elements = App.state.elements.filter(function (e) { return e.id !== id; });
+      if (!Array.isArray(App.state.deletedElements)) App.state.deletedElements = [];
+      App.state.deletedElements.push({
+        element: el,
+        pins: pins,
+        deletedAt: new Date().toISOString(),
+      });
       App.store.commit();
+    },
+
+    /* ゴミ箱の撮影ポイント一覧（残り日数つき） */
+    listDeletedElements: function () {
+      var days = App.TRASH_RETENTION_DAYS;
+      return (App.state.deletedElements || []).map(function (t) {
+        var ms = Date.parse(t.deletedAt);
+        var remain = Math.ceil((ms + days * 86400000 - Date.now()) / 86400000);
+        return {
+          id: t.element.id,
+          label: t.element.label || '（名称未設定）',
+          photoCount: (t.element.photos || []).length,
+          deletedAt: t.deletedAt,
+          remainingDays: remain < 0 ? 0 : remain,
+        };
+      });
+    },
+
+    /* 撮影ポイントを復元（一覧の末尾に戻す＝番号は振り直される） */
+    restoreElement: function (id) {
+      var list = App.state.deletedElements || [];
+      var i = list.findIndex(function (t) { return t.element.id === id; });
+      if (i === -1) return false;
+      var entry = list[i];
+      list.splice(i, 1);
+      App.state.elements.push(entry.element);
+      (entry.pins || []).forEach(function (rec) {
+        var dw = App.store.getDrawing(rec.drawingId);
+        if (dw) dw.pins.push(rec.pin);   /* 図面が残っていれば元の位置に戻す */
+      });
+      App.store.commit();
+      return true;
+    },
+
+    /* 保管期限を過ぎた撮影ポイントを完全削除。戻り値：削除件数 */
+    purgeExpiredElements: function () {
+      var list = App.state.deletedElements || [];
+      var limit = Date.now() - App.TRASH_RETENTION_DAYS * 86400000;
+      var before = list.length;
+      App.state.deletedElements = list.filter(function (t) {
+        return Date.parse(t.deletedAt) >= limit;
+      });
+      var removed = before - App.state.deletedElements.length;
+      if (removed > 0) App.store.commit();
+      return removed;
     },
 
     getElement: function (id) {
@@ -547,6 +681,7 @@ window.App = window.App || {};
   App.store.applyRemoteDoc = function (doc) {
     if (!doc || doc.app !== APP_ID) return Promise.resolve();
     normalizeDoc(doc);
+    /* サーバー側で「削除されていない」状態で届いた＝復元済みなのでゴミ箱から戻す */
     projectIndex[doc.project.id] = indexEntry(doc);
     var isCurrent = App.state && App.state.project.id === doc.project.id;
     return idbPut(doc, doc.project.id)
@@ -557,21 +692,42 @@ window.App = window.App || {};
       });
   };
 
-  /* サーバーで削除された物件をローカルからも消す */
-  App.store.removeRemoteDoc = function (projectId) {
-    if (!projectIndex[projectId]) return Promise.resolve();
-    delete projectIndex[projectId];
+  /* 他端末で削除された物件をローカルでもゴミ箱に入れる（実データは残す＝復元可能） */
+  App.store.markDeletedLocal = function (projectId, deletedAtMs) {
+    var entry = projectIndex[projectId];
+    if (!entry || entry.deleted) return Promise.resolve();
+    entry.deleted = true;
+    entry.deletedAt = new Date(deletedAtMs || Date.now()).toISOString();
     var wasCurrent = App.state && App.state.project.id === projectId;
-    return idbDel(projectId).then(function () { return idbPut(projectIndex, INDEX_KEY); })
-      .then(function () {
-        if (!wasCurrent) { App.events.emit('change'); return; }
-        var list = sortedIndex();
-        if (list.length) return loadProject(list[0].id);
-        App.state = newDoc();
-        idbPut(App.state.project.id, LAST_KEY).catch(function () {});
-        return persist(App.state).then(function () { App.events.emit('change'); });
-      });
+    return idbPut(projectIndex, INDEX_KEY).then(function () {
+      if (!wasCurrent) { App.events.emit('change'); return; }
+      /* 開いていた物件が他端末で消された場合は別の物件へ移る */
+      var list = sortedIndex();
+      if (list.length) return loadProject(list[0].id);
+      App.state = newDoc();
+      idbPut(App.state.project.id, LAST_KEY).catch(function () {});
+      return persist(App.state).then(function () { App.events.emit('change'); });
+    });
   };
+
+  /* 他端末で復元された物件をローカルでもゴミ箱から戻す */
+  App.store.unmarkDeletedLocal = function (projectId) {
+    var entry = projectIndex[projectId];
+    if (!entry || !entry.deleted) return Promise.resolve();
+    delete entry.deleted;
+    delete entry.deletedAt;
+    return idbPut(projectIndex, INDEX_KEY).then(function () { App.events.emit('change'); });
+  };
+
+  /* ---- 自動バックアップの保管（端末内） ---- */
+  App.store.getBackups = function () {
+    return idbGet('backups').then(function (l) { return Array.isArray(l) ? l : []; });
+  };
+  App.store.setBackups = function (list) { return idbPut(list, 'backups'); };
+  App.store.getBackupMeta = function () {
+    return idbGet('backupMeta').then(function (m) { return (m && typeof m === 'object') ? m : {}; });
+  };
+  App.store.setBackupMeta = function (m) { return idbPut(m, 'backupMeta'); };
 
   /* 同期メタ（物件UID→最後に取り込んだサーバー時刻）。自分の書き込みを再取得しないため */
   App.store.getSyncMeta = function () {

@@ -77,6 +77,9 @@ window.App = window.App || {};
     getProject:  function (uid) { return App.api.call('project', { query: { uid: uid } }); },
     saveProject: function (payload) { return App.api.call('project_save', { method: 'POST', body: payload }); },
     deleteProject: function (uid) { return App.api.call('project_delete', { method: 'POST', body: { projectUid: uid } }); },
+    restoreProject: function (uid) { return App.api.call('project_restore', { method: 'POST', body: { projectUid: uid } }); },
+    listTrash:   function () { return App.api.call('trash'); },
+    purgeTrash:  function () { return App.api.call('trash_purge'); },
 
     // --- メンバー管理（管理者のみ） ---
     listMembers:  function () { return App.api.call('members'); },

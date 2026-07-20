@@ -124,8 +124,9 @@ window.App = window.App || {};
         var seenTs = meta[uid] || 0;
         if (row.updatedAt <= seenTs) return;  // 既知（自分の送信含む）
         if (row.deleted) {
+          /* 他端末で削除された → ローカルもゴミ箱へ（実データは残す＝復元できる） */
           chain = chain.then(function () {
-            return App.store.removeRemoteDoc(uid).then(function () {
+            return App.store.markDeletedLocal(uid, row.deletedAt).then(function () {
               meta[uid] = row.updatedAt;
               return App.store.setSyncMeta(meta);
             });
@@ -144,16 +145,34 @@ window.App = window.App || {};
         }
       });
       return chain.then(function () {
-        return { ok: true, serverUids: r.projects.map(function (p) { return p.projectUid; }) };
+        var serverUids = r.projects.map(function (p) { return p.projectUid; });
+        /* サーバー側で保管期限切れ→完全削除された物件は、ローカルのゴミ箱からも消す。
+           （一度サーバーに載った＝metaに記録がある物件だけを対象にし、
+             まだ送信できていないローカル物件を誤って消さない） */
+        var gone = App.store.listTrashedProjects().filter(function (t) {
+          return serverUids.indexOf(t.id) === -1 && meta[t.id];
+        });
+        var chain2 = Promise.resolve();
+        gone.forEach(function (t) {
+          chain2 = chain2.then(function () {
+            delete meta[t.id];
+            return App.store.dropProjectLocal(t.id);
+          });
+        });
+        return chain2.then(function () { return { ok: true, serverUids: serverUids }; });
       });
     });
   }
 
   /* サーバーに無いローカル物件を送る（初回移行＋失敗時の自己修復。毎サイクル実行） */
   function pushMissing(serverUids) {
+    /* ゴミ箱に入っている物件は送らない（削除したものが復活しないように） */
+    var trashed = {};
+    App.store.listTrashedProjects().forEach(function (t) { trashed[t.id] = true; });
     return App.store.getAllDocs().then(function (docs) {
       var chain = Promise.resolve({ ok: true });
       docs.forEach(function (doc) {
+        if (trashed[doc.project.id]) return;
         if (serverUids.indexOf(doc.project.id) === -1 && !isEmptyDoc(doc)) {
           chain = chain.then(function (res) { return res.ok ? pushDoc(doc) : res; });
         }
@@ -215,6 +234,32 @@ window.App = window.App || {};
   App.sync = {
     isRunning: function () { return running; },
     lastResult: function () { return lastResult; },
+
+    /* 物件の削除をサーバーへ伝える（他端末のゴミ箱にも入る） */
+    pushDelete: function (projectUid) {
+      if (!running) return Promise.resolve({ ok: false });
+      return App.api.deleteProject(projectUid).then(function (r) {
+        if (r && r.ok) {
+          meta[projectUid] = r.updatedAt;
+          delete lastPushed[projectUid];
+          return App.store.setSyncMeta(meta).then(function () { return { ok: true }; });
+        }
+        return { ok: false, error: apiErr(r, '削除の同期に失敗') };
+      });
+    },
+
+    /* 物件の復元をサーバーへ伝える */
+    pushRestore: function (projectUid) {
+      if (!running) return Promise.resolve({ ok: false });
+      return App.api.restoreProject(projectUid).then(function (r) {
+        if (r && r.ok) {
+          meta[projectUid] = r.updatedAt;
+          delete lastPushed[projectUid];
+          return App.store.setSyncMeta(meta).then(function () { return { ok: true }; });
+        }
+        return { ok: false, error: apiErr(r, '復元の同期に失敗') };
+      });
+    },
 
     /* ログイン成功後に開始 */
     start: function () {

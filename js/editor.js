@@ -344,9 +344,11 @@ window.App = window.App || {};
         '<button type="button" class="point-act" data-editel="' + el.id + '">編集</button>' +
       '</div>';
     }).join('');
+    var trashedCount = (App.state.deletedElements || []).length;
     html += '<div class="panel-section"><h3>撮影ポイント</h3>' +
       '<button type="button" class="btn btn-primary" id="btn-add-point">＋ 撮影ポイントを追加</button>' +
       '<div class="point-list">' + (items || '<p class="muted">まだありません。「＋撮影ポイントを追加」から。</p>') + '</div>' +
+      (trashedCount ? '<button type="button" class="btn btn-small point-trash-link" id="btn-point-trash">🗑 削除した撮影ポイント（' + trashedCount + '）</button>' : '') +
       (dw ? '' : '<p class="muted panel-note">間取りを追加すると、ここから間取り上にピンを配置できます。</p>') +
       '</div>';
 
@@ -400,6 +402,10 @@ window.App = window.App || {};
     var addPointBtn = panel.querySelector('#btn-add-point');
     if (addPointBtn) {
       addPointBtn.addEventListener('click', function () { App.input.openForm(null); });
+    }
+    var pointTrashBtn = panel.querySelector('#btn-point-trash');
+    if (pointTrashBtn) {
+      pointTrashBtn.addEventListener('click', function () { App.trash.open('points'); });
     }
     panel.querySelectorAll('[data-moveup]').forEach(function (btn) {
       btn.addEventListener('click', function () { App.store.moveElement(btn.getAttribute('data-moveup'), -1); });

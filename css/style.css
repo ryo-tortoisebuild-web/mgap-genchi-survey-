@@ -614,3 +614,35 @@ body.modal-open { position: fixed; left: 0; right: 0; width: 100%; overflow: hid
 .member-msg { border-radius: 8px; padding: 9px 12px; font-size: 13px; margin: 12px 0 0; }
 .member-msg.is-ok { background: #e8f5e9; color: #2e7d32; }
 .member-msg.is-error { background: #ffebee; color: #c62828; }
+
+/* ---- ゴミ箱・バックアップ ---- */
+.project-tools {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  border-top: 1px solid #e0e0e0; padding-top: 12px; margin-top: 4px;
+}
+.trash-note { font-size: 13px; margin: 0 0 14px; }
+.trash-scope { font-size: 12px; margin: 0 0 10px; }
+.trash-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.trash-tab {
+  background: #eceff1; border: 1px solid #cfd8dc; color: #455a64;
+  border-radius: 999px; padding: 6px 14px; font-size: 13px; cursor: pointer;
+}
+.trash-tab.active { background: #1565c0; border-color: #1565c0; color: #fff; }
+.trash-list { margin-bottom: 8px; }
+.trash-row {
+  display: flex; gap: 10px; align-items: center; justify-content: space-between;
+  border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.trash-info { min-width: 0; flex: 1; }
+.trash-name { font-weight: bold; }
+.trash-meta { font-size: 12px; margin-top: 2px; }
+.trash-remain {
+  display: inline-block; background: #eceff1; color: #546e7a;
+  border-radius: 4px; padding: 1px 6px; font-size: 11px;
+}
+.trash-remain-soon { background: #fff3e0; color: #e65100; }
+.trash-msg { border-radius: 8px; padding: 9px 12px; font-size: 13px; margin: 12px 0 0; }
+.trash-msg.is-ok { background: #e8f5e9; color: #2e7d32; }
+.trash-msg.is-error { background: #ffebee; color: #c62828; }
+.point-trash-link { width: 100%; margin-top: 8px; }

@@ -180,11 +180,12 @@ window.App = window.App || {};
     var delBtn = box.querySelector('[data-act="delete"]');
     if (delBtn) {
       delBtn.addEventListener('click', function () {
-        App.ui.confirm('この撮影ポイントを削除しますか？（間取り上のピン・写真・書き込みも消えます）').then(function (ok) {
+        App.ui.confirm('この撮影ポイントを削除しますか？（間取り上のピン・写真・書き込みも一緒に隠れます）\n' +
+          App.TRASH_RETENTION_DAYS + '日間はゴミ箱に保管され、写真やピン位置ごと復元できます。').then(function (ok) {
           if (!ok) return;
           App.store.deleteElement(elementId);
           App.ui.closeModal(overlay);
-          App.ui.toast('削除しました');
+          App.ui.toast('🗑 ゴミ箱に移動しました（' + App.TRASH_RETENTION_DAYS + '日以内なら復元できます）', 3500);
         });
       });
     }
@@ -217,10 +218,24 @@ window.App = window.App || {};
         '<h2 class="modal-title">物件一覧</h2>' +
         '<button type="button" class="btn btn-primary project-create" id="btn-create-project">＋ 新規物件を作成</button>' +
         '<div class="project-list">' + (rows || '<p class="empty-note">物件がありません</p>') + '</div>' +
+        '<div class="project-tools">' +
+          '<button type="button" class="btn btn-small" id="btn-open-trash">🗑 ゴミ箱</button>' +
+          '<button type="button" class="btn btn-small" id="btn-open-backup">💾 自動バックアップ</button>' +
+        '</div>' +
         '<div class="modal-actions"><button type="button" class="btn" data-act="close">閉じる</button></div>';
 
       box.querySelector('[data-act="close"]').addEventListener('click', function () {
         App.ui.closeModal(overlay);
+      });
+
+      box.querySelector('#btn-open-trash').addEventListener('click', function () {
+        App.ui.closeModal(overlay);
+        App.trash.open('projects');
+      });
+
+      box.querySelector('#btn-open-backup').addEventListener('click', function () {
+        App.ui.closeModal(overlay);
+        App.backup.open();
       });
 
       box.querySelector('#btn-create-project').addEventListener('click', function () {
@@ -247,10 +262,11 @@ window.App = window.App || {};
         btn.addEventListener('click', function () {
           var id = btn.getAttribute('data-del');
           var entry = App.store.listProjects().find(function (e) { return e.id === id; });
-          App.ui.confirm('物件「' + (entry ? entry.name : '') + '」を削除しますか？（元に戻せません。必要なら先にJSON書き出しを）').then(function (ok) {
+          App.ui.confirm('物件「' + (entry ? entry.name : '') + '」を削除しますか？\n' +
+            App.TRASH_RETENTION_DAYS + '日間はゴミ箱に保管され、いつでも復元できます。').then(function (ok) {
             if (!ok) return;
             App.store.deleteProject(id).then(function () {
-              App.ui.toast('削除しました');
+              App.ui.toast('🗑 ゴミ箱に移動しました（' + App.TRASH_RETENTION_DAYS + '日以内なら復元できます）', 3500);
               render();  /* 一覧を更新して開いたまま */
             });
           });

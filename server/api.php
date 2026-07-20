@@ -175,7 +175,9 @@ switch ($action) {
   case 'projects': { // 一覧（メタのみ。ポーリング用に updatedAt を返す）
     // 方式A：物件は全ユーザー共有。ログインしていれば全件を閲覧・編集できる
     require_auth($pdo);
-    $st = $pdo->prepare('SELECT project_uid, name, address, survey_date, updated_at, deleted FROM projects ORDER BY updated_at DESC');
+    // 保管期限を過ぎたゴミ箱の中身をここで自動削除（cron不要。1時間に1回だけ実行）
+    purge_expired_throttled($pdo, $cfg);
+    $st = $pdo->prepare('SELECT project_uid, name, address, survey_date, updated_at, deleted, deleted_at FROM projects ORDER BY updated_at DESC');
     $st->execute();
     $rows = $st->fetchAll();
     $list = array();
@@ -183,6 +185,7 @@ switch ($action) {
       $list[] = array(
         'projectUid' => $r['project_uid'], 'name' => $r['name'], 'address' => $r['address'],
         'surveyDate' => $r['survey_date'], 'updatedAt' => (int)$r['updated_at'], 'deleted' => (int)$r['deleted'],
+        'deletedAt' => $r['deleted_at'] !== null ? (int)$r['deleted_at'] : null,
       );
     }
     json_out(array('ok' => true, 'projects' => $list));
@@ -245,9 +248,54 @@ switch ($action) {
     $b = read_json_body();
     $uid = trim(isset($b['projectUid']) ? $b['projectUid'] : '');
     $ts = now_ms();
-    $up = $pdo->prepare('UPDATE projects SET deleted=1, updated_at=? WHERE project_uid=?');
+    // ゴミ箱へ：実体は消さず、削除日時を記録して一覧から隠す
+    $up = $pdo->prepare('UPDATE projects SET deleted=1, updated_at=?, deleted_at=? WHERE project_uid=?');
+    $up->execute(array($ts, $ts, $uid));
+    json_out(array('ok' => true, 'updatedAt' => $ts, 'retentionDays' => trash_retention_days($cfg)));
+    break;
+  }
+
+  case 'project_restore': { // ゴミ箱から復元
+    require_auth($pdo);
+    if ($method !== 'POST') fail('POSTで送信してください', 405);
+    $b = read_json_body();
+    $uid = trim(isset($b['projectUid']) ? $b['projectUid'] : '');
+    $ex = $pdo->prepare('SELECT id FROM projects WHERE project_uid = ? LIMIT 1');
+    $ex->execute(array($uid));
+    if (!$ex->fetch()) fail('物件が見つかりません（保管期限が過ぎて完全削除された可能性があります）', 404);
+    $ts = now_ms();
+    $up = $pdo->prepare('UPDATE projects SET deleted=0, updated_at=?, deleted_at=NULL WHERE project_uid=?');
     $up->execute(array($ts, $uid));
     json_out(array('ok' => true, 'updatedAt' => $ts));
+    break;
+  }
+
+  case 'trash': { // ゴミ箱の中身（残り日数つき）
+    require_auth($pdo);
+    $days = trash_retention_days($cfg);
+    $st = $pdo->prepare('SELECT project_uid, name, address, deleted_at, updated_at FROM projects WHERE deleted = 1 ORDER BY deleted_at DESC');
+    $st->execute();
+    $list = array();
+    foreach ($st->fetchAll() as $r) {
+      $delAt = $r['deleted_at'] !== null ? (int) $r['deleted_at'] : null;
+      $remain = null;
+      if ($delAt !== null) {
+        $remain = (int) ceil(($delAt + $days * 86400 * 1000 - now_ms()) / (86400 * 1000));
+        if ($remain < 0) $remain = 0;
+      }
+      $list[] = array(
+        'projectUid' => $r['project_uid'], 'name' => $r['name'], 'address' => $r['address'],
+        'deletedAt' => $delAt, 'remainingDays' => $remain, 'updatedAt' => (int) $r['updated_at'],
+      );
+    }
+    json_out(array('ok' => true, 'trash' => $list, 'retentionDays' => $days));
+    break;
+  }
+
+  case 'trash_purge': { // 期限切れの完全削除を今すぐ実行（動作確認・手動実行用）
+    require_auth($pdo);
+    $n = purge_expired($pdo, $cfg);
+    json_out(array('ok' => true, 'purged' => $n, 'retentionDays' => trash_retention_days($cfg)));
     break;
   }
 

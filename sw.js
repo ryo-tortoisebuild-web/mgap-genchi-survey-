@@ -1,7 +1,7 @@
 /* 最小Service Worker：ネットワーク優先＋オフライン時のみキャッシュ利用。
    （cache-firstだとアプリ更新が届かなくなるためnetwork-first）
    完全オフライン対応はスコープ外。失敗しても本体機能に影響しない */
-var CACHE = 'genchi-survey-v16';
+var CACHE = 'genchi-survey-v17';
 var CORE = [
   './',
   './index.html',
@@ -15,6 +15,8 @@ var CORE = [
   './js/sync.js',
   './js/auth.js',
   './js/members.js',
+  './js/trash.js',
+  './js/backup.js',
   './js/photo.js',
   './js/draw.js',
   './js/input.js',
