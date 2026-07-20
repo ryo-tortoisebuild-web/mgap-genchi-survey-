@@ -18,7 +18,7 @@ window.App = window.App || {};
     accountArea.innerHTML =
       '<span class="acct-name">👤 ' + escapeHtml(username) + (isAdmin ? '<span class="acct-admin">管理者</span>' : '') + '</span>' +
       (isAdmin ? '<button type="button" class="btn btn-small" id="btn-members">👥 メンバー</button>' : '') +
-      '<button type="button" class="btn btn-small" id="btn-sync-now">🔄 今すぐ同期</button>' +
+      '<button type="button" class="btn btn-small" id="btn-sync-now">🔄 <span class="lbl-long">今すぐ</span>同期</button>' +
       '<button type="button" class="btn btn-small" id="btn-logout">ログアウト</button>';
     if (isAdmin && el('btn-members')) {
       el('btn-members').addEventListener('click', function () { App.members.open(); });

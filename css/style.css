@@ -30,7 +30,33 @@ textarea { resize: vertical; }
   border-radius: 6px; padding: 4px 10px; max-width: 46vw;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.header-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.header-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+/* ボタン内で単語が途中改行されないように（「メン／バー」対策） */
+#app-header .btn, .account-area .acct-name { white-space: nowrap; }
+
+/* ---- スマホ幅：ボタンが増えても収まるように詰める（PC幅は変更しない） ---- */
+@media (max-width: 767px) {
+  #app-header { padding: 8px 10px; gap: 6px; }
+  #app-header .header-row { width: 100%; }
+  .header-actions { width: 100%; gap: 5px; }
+  #app-header .btn-small { padding: 5px 8px; font-size: 12px; }
+  .account-area { gap: 5px; }
+  .account-area .acct-name { font-size: 12px; padding: 4px 6px; }
+  .acct-admin { font-size: 10px; padding: 1px 4px; margin-left: 4px; }
+  .project-name { max-width: 52vw; font-size: 13px; }
+  /* 長いラベルはスマホでは省略（⬇JSON書き出し → ⬇書き出し 等） */
+  .lbl-long { display: none; }
+}
+
+/* ---- 極小幅（iPhone SE等 320px）：さらに詰めて確実に収める ---- */
+@media (max-width: 360px) {
+  #app-header { padding: 8px 8px; }
+  .header-actions { gap: 4px; }
+  #app-header .btn-small { padding: 5px 6px; font-size: 11px; }
+  .account-area { gap: 4px; }
+  .account-area .acct-name { font-size: 11px; padding: 3px 5px; }
+}
 
 /* ============ ナビ ============ */
 #app-nav {
@@ -555,7 +581,8 @@ body.modal-open { position: fixed; left: 0; right: 0; width: 100%; overflow: hid
 
 /* ---- アカウント表示（ヘッダー） ---- */
 .account-area[hidden], .login-overlay[hidden] { display: none; }
-.account-area { display: inline-flex; align-items: center; gap: 8px; }
+/* ヘッダーが狭いときは、アカウント欄の中のボタンも折り返せるようにする */
+.account-area { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .account-area .acct-name {
   color: #fff; font-size: 13px; background: rgba(255,255,255,.14);
   border-radius: 6px; padding: 4px 8px; white-space: nowrap;
